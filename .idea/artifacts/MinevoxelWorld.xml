@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="MinevoxelWorld">
+    <output-path>$PROJECT_DIR$/out/artifacts/MinevoxelWorld</output-path>
+    <root id="archive" name="MinevoxelWorld.jar">
+      <element id="module-output" name="WorldsManager" />
+    </root>
+  </artifact>
+</component>
