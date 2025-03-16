@@ -11,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import java.io.ByteArrayInputStream;
@@ -22,7 +23,7 @@ import java.util.logging.Level;
 /**
  * Listener para processamento de mensagens entre servidores
  */
-public class WorldsMessageListener implements PluginMessageListener {
+public class WorldsMessageListener implements PluginMessageListener, Listener {
 
     private final WorldsManager plugin;
     private final String PLUGIN_CHANNEL = "WorldsManager";

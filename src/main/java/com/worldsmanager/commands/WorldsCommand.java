@@ -23,11 +23,18 @@ public class WorldsCommand implements CommandExecutor {
     private final WorldsManager plugin;
     private final LanguageManager languageManager;
     private WorldsGUI worldsGUI;
+    private WorldCreateGUI worldCreateGUI;
 
     public WorldsCommand(WorldsManager plugin) {
         this.plugin = plugin;
         this.languageManager = plugin.getLanguageManager();
         this.worldsGUI = new WorldsGUI(plugin);
+        this.worldCreateGUI = new WorldCreateGUI(plugin);
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] WorldsCommand inicializado, WorldCreateGUI criado");
+        }
     }
 
     @Override
@@ -39,6 +46,12 @@ public class WorldsCommand implements CommandExecutor {
 
         Player player = (Player) sender;
         UUID playerUUID = player.getUniqueId();
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] Comando recebido: " + label + " " + String.join(" ", args) +
+                    " por " + player.getName());
+        }
 
         // Verifica permissão
         if (!player.hasPermission("worldsmanager.use")) {
@@ -82,6 +95,11 @@ public class WorldsCommand implements CommandExecutor {
      * @param player Jogador
      */
     private void openMainMenu(Player player) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] Abrindo menu principal para " + player.getName());
+        }
+
         worldsGUI.openMainMenu(player);
         player.sendMessage(ChatColor.GREEN + languageManager.getMessage("opening-menu"));
     }
@@ -93,8 +111,15 @@ public class WorldsCommand implements CommandExecutor {
      * @param args Argumentos do comando
      */
     private void handleCreateCommand(Player player, String[] args) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] Comando de criação de mundo por " + player.getName() +
+                    ", argumentos: " + (args.length > 1 ? args[1] : "nenhum"));
+        }
+
         // Verifica permissão
-        if (!player.hasPermission("worldsmanager.create")) {
+        if (!player.hasPermission("worldsmanager.create") &&
+                !plugin.getConfigManager().get("permissions.allow-all-players-to-create", true).equals(true)) {
             player.sendMessage(ChatColor.RED + languageManager.getMessage("no-permission"));
             return;
         }
@@ -103,7 +128,7 @@ public class WorldsCommand implements CommandExecutor {
         List<CustomWorld> playerWorlds = plugin.getWorldManager().getPlayerWorlds(player.getUniqueId());
         int maxWorlds = plugin.getConfigManager().getMaxWorldsPerPlayer();
 
-        if (playerWorlds.size() >= maxWorlds && !player.hasPermission("worldsmanager.create.unlimited")) {
+        if (maxWorlds > 0 && playerWorlds.size() >= maxWorlds && !player.hasPermission("worldsmanager.create.unlimited")) {
             player.sendMessage(ChatColor.RED + languageManager.getMessage("world-limit-reached")
                     .replace("%limit%", String.valueOf(maxWorlds)));
             return;
@@ -123,39 +148,37 @@ public class WorldsCommand implements CommandExecutor {
         // Se tiver nome como argumento, cria diretamente
         if (args.length >= 2) {
             String worldName = args[1];
-            // Cria o mundo diretamente
-            createWorld(player, worldName);
+
+            // Verifica se contém apenas caracteres válidos
+            if (!worldName.matches("[a-zA-Z0-9_]+")) {
+                player.sendMessage(ChatColor.RED + languageManager.getMessage("invalid-world-name-chars"));
+                return;
+            }
+
+            // Verifica se o nome é válido
+            if (worldName.length() < 3 || worldName.length() > 16) {
+                player.sendMessage(ChatColor.RED + languageManager.getMessage("invalid-world-name-length"));
+                return;
+            }
+
+            // Verifica se o nome já existe
+            boolean nameExists = plugin.getWorldManager().getAllWorlds().stream()
+                    .anyMatch(world -> world.getName().equalsIgnoreCase(worldName));
+
+            if (nameExists) {
+                player.sendMessage(ChatColor.RED + languageManager.getMessage("world-name-exists"));
+                return;
+            }
+
+            // Usar o método de criação direta da WorldCreateGUI para manter consistência
+            worldCreateGUI.createWorldDirectly(player, worldName);
         } else {
-            // Abre GUI de criação
-            new WorldCreateGUI(plugin).open(player);
+            // Abre GUI de criação - usa a instância atual
+            // IMPORTANTE: Limpe qualquer estado anterior do jogador
+            worldCreateGUI.clearPlayerData(player);
+            worldCreateGUI.open(player);
             player.sendMessage(ChatColor.GREEN + languageManager.getMessage("opening-create-gui"));
         }
-    }
-
-    /**
-     * Cria um mundo para o jogador
-     *
-     * @param player Jogador
-     * @param worldName Nome do mundo
-     */
-    private void createWorld(Player player, String worldName) {
-        player.sendMessage(ChatColor.GREEN + languageManager.getMessage("creating-world")
-                .replace("%name%", worldName));
-
-        // Usa o ícone padrão (pode ser personalizado depois)
-        plugin.getWorldManager().createWorld(worldName, player.getUniqueId(),
-                        plugin.getConfigManager().getCreateButtonMaterial(), player)
-                .thenAccept(customWorld -> {
-                    if (customWorld != null) {
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            player.sendMessage(ChatColor.GREEN + languageManager.getMessage("world-created-success"));
-                        });
-                    } else {
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            player.sendMessage(ChatColor.RED + languageManager.getMessage("world-creation-failed"));
-                        });
-                    }
-                });
     }
 
     /**
@@ -165,6 +188,12 @@ public class WorldsCommand implements CommandExecutor {
      * @param args Argumentos do comando
      */
     private void handleTeleportCommand(Player player, String[] args) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] Comando de teleporte por " + player.getName() +
+                    ", argumentos: " + (args.length > 1 ? args[1] : "nenhum"));
+        }
+
         if (args.length < 2) {
             player.sendMessage(ChatColor.RED + languageManager.getMessage("specify-world"));
             return;
@@ -220,6 +249,11 @@ public class WorldsCommand implements CommandExecutor {
      * @param player Jogador
      */
     private void handleListCommand(Player player) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] Comando de listagem de mundos por " + player.getName());
+        }
+
         List<CustomWorld> accessibleWorlds = plugin.getWorldManager().getAccessibleWorlds(player.getUniqueId());
 
         if (accessibleWorlds.isEmpty()) {
@@ -258,5 +292,14 @@ public class WorldsCommand implements CommandExecutor {
      */
     public WorldsGUI getGUI() {
         return worldsGUI;
+    }
+
+    /**
+     * Obtém a instância de WorldCreateGUI
+     *
+     * @return Instância de WorldCreateGUI
+     */
+    public WorldCreateGUI getWorldCreateGUI() {
+        return worldCreateGUI;
     }
 }

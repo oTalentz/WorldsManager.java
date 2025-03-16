@@ -1,6 +1,7 @@
 package com.worldsmanager.managers;
 
 import com.worldsmanager.WorldsManager;
+import com.worldsmanager.listeners.WorldsMessageListener;
 import com.worldsmanager.models.CustomWorld;
 import com.worldsmanager.models.WorldSettings;
 import com.worldsmanager.utils.WorldCreationUtils;
@@ -105,8 +106,17 @@ public class WorldManager {
     public CompletableFuture<CustomWorld> createWorld(String name, UUID ownerUUID, Material icon, Player requester) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Verifica permissões
+                if (requester != null && !requester.hasPermission("worldsmanager.create") &&
+                        !plugin.getConfigManager().get("permissions.allow-all-players-to-create", true).equals(true)) {
+                    requester.sendMessage(ChatColor.RED + plugin.getLanguageManager().getMessage("no-permission"));
+                    throw new RuntimeException("Jogador não tem permissão para criar mundos");
+                }
+
                 // Gera um nome de mundo único
                 String worldName = "wm_" + UUID.randomUUID().toString().substring(0, 8);
+
+                plugin.getLogger().info("Iniciando criação de mundo: " + worldName);
 
                 // Cria objeto de mundo personalizado
                 CustomWorld customWorld = new CustomWorld(name, ownerUUID, worldName, icon);
@@ -117,6 +127,7 @@ public class WorldManager {
 
                 // Salva no banco de dados
                 databaseManager.saveWorld(customWorld);
+                plugin.getLogger().info("Mundo salvo no banco de dados: " + worldName);
 
                 // Adiciona aos mundos carregados
                 loadedWorlds.put(worldName, customWorld);
@@ -125,14 +136,45 @@ public class WorldManager {
                 if (configManager.isCrossServerMode()) {
                     // Verificação de null para evitar NullPointerException
                     if (messagingManager != null) {
-                        messagingManager.sendCreateWorldMessage(customWorld, requester);
+                        plugin.getLogger().info("Enviando mensagem cross-server para criar mundo: " + worldName);
 
-                        // Teleporta o jogador para o servidor de mundos se configurado
-                        if (configManager.isAutoTeleport()) {
-                            messagingManager.sendTeleportToWorldMessage(requester, worldName);
+                        // Verifica se os canais estão registrados
+                        if (!plugin.isReadyForCrossServer()) {
+                            plugin.getLogger().severe("Canais cross-server não estão corretamente registrados!");
+                            // Registra novamente os canais
+                            plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
+                            plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "BungeeCord",
+                                    new WorldsMessageListener(plugin));
+                        }
+
+                        boolean messageSent = messagingManager.sendCreateWorldMessage(customWorld, requester);
+
+                        if (!messageSent) {
+                            plugin.getLogger().severe("Falha ao enviar mensagem de criação cross-server!");
+                            if (requester != null) {
+                                requester.sendMessage(ChatColor.RED + "Falha ao enviar mensagem de criação para o servidor de mundos!");
+                            }
+                            // Tenta criar localmente como fallback em caso de falha
+                            createWorldLocally(worldName, customWorld);
+                        } else {
+                            // Teleporta o jogador para o servidor de mundos se configurado
+                            if (configManager.isAutoTeleport()) {
+                                plugin.getLogger().info("Tentando teleportar jogador para o servidor de mundos");
+                                boolean teleportSent = messagingManager.sendTeleportToWorldMessage(requester, worldName);
+
+                                if (!teleportSent) {
+                                    plugin.getLogger().severe("Falha ao enviar mensagem de teleporte cross-server!");
+                                    if (requester != null) {
+                                        requester.sendMessage(ChatColor.RED + "Falha ao teleportar para o servidor de mundos. Tente teleportar manualmente.");
+                                    }
+                                }
+                            }
                         }
                     } else {
                         plugin.getLogger().severe("MessagingManager não foi inicializado! Não é possível enviar mensagem cross-server");
+                        if (requester != null) {
+                            requester.sendMessage(ChatColor.RED + "Erro interno: MessagingManager não inicializado!");
+                        }
                         // Cria mundo localmente como fallback
                         createWorldLocally(worldName, customWorld);
                     }
@@ -144,8 +186,17 @@ public class WorldManager {
                 return customWorld;
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Falha ao criar mundo", e);
+                if (requester != null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        requester.sendMessage(ChatColor.RED + "Erro ao criar mundo: " + e.getMessage());
+                    });
+                }
                 throw new RuntimeException("Falha ao criar mundo", e);
             }
+        }).exceptionally(e -> {
+            plugin.getLogger().severe("Exceção não tratada na criação de mundo: " + e.getMessage());
+            e.printStackTrace();
+            return null;
         });
     }
 
@@ -157,14 +208,19 @@ public class WorldManager {
      * @throws IllegalStateException Se a criação falhar
      */
     private void createWorldLocally(String worldName, CustomWorld customWorld) throws IllegalStateException {
+        plugin.getLogger().info("Criando mundo localmente: " + worldName);
+
         World world = WorldCreationUtils.createWorld(worldName,
                 configManager.getWorldType(),
                 configManager.getWorldEnvironment(),
                 configManager.isGenerateStructures());
 
         if (world == null) {
+            plugin.getLogger().severe("Falha ao criar mundo localmente: " + worldName);
             throw new IllegalStateException("Falha ao criar mundo");
         }
+
+        plugin.getLogger().info("Mundo criado localmente com sucesso: " + worldName);
 
         // Aplica configurações ao mundo
         applyWorldSettings(customWorld);
@@ -181,11 +237,31 @@ public class WorldManager {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 String worldName = customWorld.getWorldName();
+                plugin.getLogger().info("Iniciando exclusão do mundo: " + worldName);
 
                 // Se estiver no modo cross-server e tiver um jogador que solicitou
                 if (configManager.isCrossServerMode() && requester != null && messagingManager != null) {
+                    plugin.getLogger().info("Enviando solicitação de exclusão para o servidor de mundos: " + worldName);
+
+                    // Verifica se os canais estão registrados
+                    if (!plugin.isReadyForCrossServer()) {
+                        plugin.getLogger().severe("Canais cross-server não estão corretamente registrados!");
+                        // Registra novamente os canais
+                        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
+                        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "BungeeCord",
+                                new WorldsMessageListener(plugin));
+                    }
+
                     // Envia mensagem para excluir o mundo no servidor de mundos
-                    messagingManager.sendDeleteWorldMessage(worldName, requester);
+                    boolean messageSent = messagingManager.sendDeleteWorldMessage(worldName, requester);
+
+                    if (!messageSent) {
+                        plugin.getLogger().severe("Falha ao enviar mensagem de exclusão cross-server!");
+                        if (requester != null) {
+                            requester.sendMessage(ChatColor.RED + "Falha ao enviar mensagem de exclusão para o servidor de mundos!");
+                        }
+                        // Continua com a exclusão local dos dados
+                    }
                 } else {
                     // Teleporta todos os jogadores para fora deste mundo
                     World world = customWorld.getWorld();
@@ -197,7 +273,7 @@ public class WorldManager {
 
                         // Descarrega o mundo
                         if (!unloadWorld(worldName, false)) {
-                            throw new IllegalStateException("Falha ao descarregar mundo");
+                            plugin.getLogger().warning("Falha ao descarregar mundo: " + worldName);
                         }
                     }
 
@@ -205,6 +281,7 @@ public class WorldManager {
                     File worldFolder = new File(Bukkit.getWorldContainer(), worldName);
                     try {
                         deleteFolder(worldFolder);
+                        plugin.getLogger().info("Arquivos do mundo excluídos: " + worldName);
                     } catch (IOException e) {
                         plugin.getLogger().log(Level.SEVERE, "Falha ao excluir pasta do mundo", e);
                         return false;
@@ -213,13 +290,20 @@ public class WorldManager {
 
                 // Remove do banco de dados
                 databaseManager.deleteWorld(customWorld);
+                plugin.getLogger().info("Mundo removido do banco de dados: " + worldName);
 
                 // Remove dos mundos carregados
                 loadedWorlds.remove(worldName);
 
+                plugin.getLogger().info("Exclusão do mundo concluída com sucesso: " + worldName);
                 return true;
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Falha ao excluir mundo", e);
+                if (requester != null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        requester.sendMessage(ChatColor.RED + "Erro ao excluir mundo: " + e.getMessage());
+                    });
+                }
                 return false;
             }
         });
@@ -243,12 +327,19 @@ public class WorldManager {
             return customWorld.getWorld();
         }
 
+        plugin.getLogger().info("Carregando mundo: " + customWorld.getWorldName());
+
         World world = Bukkit.getWorld(customWorld.getWorldName());
         if (world == null) {
             world = WorldCreationUtils.loadWorld(customWorld.getWorldName());
             if (world != null) {
+                plugin.getLogger().info("Mundo carregado com sucesso: " + customWorld.getWorldName());
                 applyWorldSettings(customWorld);
+            } else {
+                plugin.getLogger().warning("Falha ao carregar mundo: " + customWorld.getWorldName());
             }
+        } else {
+            plugin.getLogger().info("Mundo já está carregado: " + customWorld.getWorldName());
         }
 
         return world;
@@ -264,6 +355,20 @@ public class WorldManager {
     public boolean teleportPlayerToWorld(Player player, CustomWorld customWorld) {
         // Verifica se o modo cross-server está ativado
         if (configManager.isCrossServerMode() && messagingManager != null) {
+            plugin.getLogger().info("Tentando teleportar jogador via cross-server: " + player.getName() +
+                    " para " + customWorld.getWorldName());
+
+            // Verifica se os canais estão registrados
+            if (!plugin.isReadyForCrossServer()) {
+                plugin.getLogger().severe("Canais cross-server não estão corretamente registrados!");
+                player.sendMessage(ChatColor.RED + "Erro: canais cross-server não estão registrados corretamente!");
+                // Registra novamente os canais
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
+                plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "BungeeCord",
+                        new WorldsMessageListener(plugin));
+                return false;
+            }
+
             // Envia mensagem para teleportar o jogador para o mundo no servidor de mundos
             return messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
         } else {
@@ -275,7 +380,15 @@ public class WorldManager {
             }
 
             // Teleporta o jogador
-            return customWorld.teleportPlayer(player);
+            boolean success = customWorld.teleportPlayer(player);
+            if (success) {
+                plugin.getLogger().info("Jogador teleportado com sucesso: " + player.getName() +
+                        " para " + customWorld.getWorldName());
+            } else {
+                plugin.getLogger().warning("Falha ao teleportar jogador: " + player.getName() +
+                        " para " + customWorld.getWorldName());
+            }
+            return success;
         }
     }
 
@@ -287,10 +400,13 @@ public class WorldManager {
     public void applyWorldSettings(CustomWorld customWorld) {
         World world = customWorld.getWorld();
         if (world == null) {
+            plugin.getLogger().warning("Tentativa de aplicar configurações a um mundo não carregado: " +
+                    customWorld.getWorldName());
             return;
         }
 
         WorldSettings settings = customWorld.getSettings();
+        plugin.getLogger().info("Aplicando configurações ao mundo: " + customWorld.getWorldName());
 
         // Aplica configurações
         world.setPVP(settings.isPvpEnabled());
@@ -400,6 +516,8 @@ public class WorldManager {
                 }
             }
         }
+
+        plugin.getLogger().info("Configurações aplicadas com sucesso ao mundo: " + customWorld.getWorldName());
     }
 
     /**
@@ -412,11 +530,32 @@ public class WorldManager {
     public void updateWorldSettings(CustomWorld customWorld, WorldSettings settings, Player requester) {
         // Atualiza as configurações no objeto
         customWorld.setSettings(settings);
+        plugin.getLogger().info("Atualizando configurações para o mundo: " + customWorld.getWorldName());
 
         // Se estiver no modo cross-server e tiver um jogador que solicitou
         if (configManager.isCrossServerMode() && requester != null && messagingManager != null) {
+            plugin.getLogger().info("Enviando atualização de configurações via cross-server: " +
+                    customWorld.getWorldName());
+
+            // Verifica se os canais estão registrados
+            if (!plugin.isReadyForCrossServer()) {
+                plugin.getLogger().severe("Canais cross-server não estão corretamente registrados!");
+                if (requester != null) {
+                    requester.sendMessage(ChatColor.RED + "Erro: canais cross-server não estão registrados corretamente!");
+                }
+                // Registra novamente os canais
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
+                plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "BungeeCord",
+                        new WorldsMessageListener(plugin));
+            }
+
             // Envia mensagem para atualizar as configurações no servidor de mundos
-            messagingManager.sendUpdateWorldSettingsMessage(customWorld.getWorldName(), settings, requester);
+            boolean messageSent = messagingManager.sendUpdateWorldSettingsMessage(
+                    customWorld.getWorldName(), settings, requester);
+
+            if (!messageSent && requester != null) {
+                requester.sendMessage(ChatColor.RED + "Falha ao enviar atualização de configurações para o servidor de mundos!");
+            }
         } else if (customWorld.isLoaded()) {
             // Aplica as configurações ao mundo
             applyWorldSettings(customWorld);
@@ -424,6 +563,7 @@ public class WorldManager {
 
         // Salva no banco de dados
         databaseManager.saveWorld(customWorld);
+        plugin.getLogger().info("Configurações salvas no banco de dados: " + customWorld.getWorldName());
     }
 
     /**
@@ -477,6 +617,7 @@ public class WorldManager {
      */
     public void addLoadedWorld(CustomWorld customWorld) {
         loadedWorlds.put(customWorld.getWorldName(), customWorld);
+        plugin.getLogger().info("Mundo adicionado à lista de mundos carregados: " + customWorld.getWorldName());
     }
 
     /**
@@ -492,13 +633,22 @@ public class WorldManager {
             return true;
         }
 
+        plugin.getLogger().info("Descarregando mundo: " + worldName + " (save=" + save + ")");
+
         // Teleporta jogadores para fora do mundo
         World defaultWorld = Bukkit.getWorlds().get(0);
         for (Player player : world.getPlayers()) {
             player.teleport(defaultWorld.getSpawnLocation());
         }
 
-        return Bukkit.unloadWorld(world, save);
+        boolean success = Bukkit.unloadWorld(world, save);
+        if (success) {
+            plugin.getLogger().info("Mundo descarregado com sucesso: " + worldName);
+        } else {
+            plugin.getLogger().warning("Falha ao descarregar mundo: " + worldName);
+        }
+
+        return success;
     }
 
     /**
@@ -511,6 +661,8 @@ public class WorldManager {
         if (!folder.exists()) {
             return;
         }
+
+        plugin.getLogger().info("Excluindo pasta do mundo: " + folder.getAbsolutePath());
 
         File[] files = folder.listFiles();
         if (files != null) {
@@ -528,5 +680,27 @@ public class WorldManager {
         if (!folder.delete()) {
             throw new IOException("Falha ao excluir pasta: " + folder);
         }
+
+        plugin.getLogger().info("Pasta excluída com sucesso: " + folder.getAbsolutePath());
+    }
+
+    /**
+     * Verifica se um mundo existe nos registros do plugin
+     *
+     * @param worldName Nome do mundo
+     * @return true se o mundo existe
+     */
+    public boolean worldExists(String worldName) {
+        return loadedWorlds.containsKey(worldName);
+    }
+
+    /**
+     * Verifica se um mundo existe no sistema de arquivos
+     *
+     * @param worldName Nome do mundo
+     * @return true se o mundo existe no sistema de arquivos
+     */
+    public boolean worldExistsOnDisk(String worldName) {
+        return WorldCreationUtils.worldExists(worldName);
     }
 }

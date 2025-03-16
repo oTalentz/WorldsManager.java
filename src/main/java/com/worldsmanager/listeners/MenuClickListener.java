@@ -13,6 +13,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -40,6 +41,21 @@ public class MenuClickListener implements Listener {
         plugin.getLogger().info("MenuClickListener inicializado");
     }
 
+    @EventHandler(priority = EventPriority.LOW)
+    public void onPlayerChat(AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+
+        // Se o jogador está no modo de criação de mundo no WorldCreateGUI,
+        // não devemos processar esses eventos em outro lugar
+        WorldCreateGUI createGUI = plugin.getWorldsCommand().getWorldCreateGUI();
+        if (createGUI != null && createGUI.getPlayerStage(player) != WorldCreateGUI.CreationStage.NONE) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Evento de chat ignorado - jogador está no processo de criação de mundo");
+            return;
+        }
+
+        // Processa outros eventos de chat se necessário
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player)) {
@@ -49,6 +65,12 @@ public class MenuClickListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         String title = event.getView().getTitle();
         int slot = event.getRawSlot();
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Clique no inventário por " + player.getName() +
+                    ", título: " + title + ", slot: " + slot);
+        }
 
         // Verifica se é um inventário válido do plugin
         if (title.equals(worldsGUI.getMainGUITitle())) {
@@ -95,6 +117,12 @@ public class MenuClickListener implements Listener {
         UUID playerUUID = player.getUniqueId();
         String title = event.getView().getTitle();
 
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Inventário fechado por " + player.getName() +
+                    ", título: " + title);
+        }
+
         // Se estava confirmando uma exclusão e fechou o inventário, cancela
         String confirmTitle = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getConfirmGUITitle());
@@ -119,12 +147,17 @@ public class MenuClickListener implements Listener {
      * @param slot Slot clicado
      */
     private void handleMainGUIClick(Player player, int slot) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Tratando clique no menu principal, slot: " + slot);
+        }
+
         // Verifica se é o botão de criar mundo
         int createButtonSlot = plugin.getConfigManager().getCreateButtonSlot();
         if (slot == createButtonSlot) {
             player.closeInventory();
             // Abre a GUI de criação
-            new WorldCreateGUI(plugin).open(player);
+            plugin.getWorldsCommand().getWorldCreateGUI().open(player);
             return;
         }
 
@@ -136,6 +169,11 @@ public class MenuClickListener implements Listener {
 
         // Obtém o nome do mundo a partir do item
         String worldName = ChatColor.stripColor(clickedItem.getItemMeta().getDisplayName());
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Clique em mundo: " + worldName);
+        }
 
         // Procura o mundo clicado
         CustomWorld world = null;
@@ -178,6 +216,11 @@ public class MenuClickListener implements Listener {
             return;
         }
 
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Tratando clique no menu de criação, slot: " + slot);
+        }
+
         ItemStack clickedItem = inventory.getItem(slot);
         if (clickedItem == null || clickedItem.getType() == Material.AIR) {
             return;
@@ -194,8 +237,7 @@ public class MenuClickListener implements Listener {
         Material selectedIcon = clickedItem.getType();
         if (plugin.getConfigManager().isValidIconMaterial(selectedIcon)) {
             player.closeInventory();
-            // Aqui você precisa acessar o WorldCreateGUI para continuar o processo de criação
-            // No nosso caso, o WorldCreateGUI cuida diretamente da criação, então não precisamos fazer nada aqui
+            // Deixamos o WorldCreateGUI lidar com isso
         }
     }
 
@@ -210,6 +252,12 @@ public class MenuClickListener implements Listener {
         if (world == null) {
             player.closeInventory();
             return;
+        }
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Tratando clique no menu de gerenciamento, slot: " +
+                    slot + ", mundo: " + world.getName());
         }
 
         switch (slot) {
@@ -252,6 +300,12 @@ public class MenuClickListener implements Listener {
      * @param world Mundo a ser excluído
      */
     private void confirmWorldDeletion(Player player, CustomWorld world) {
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Exibindo confirmação de exclusão para " +
+                    world.getName());
+        }
+
         // Cria um inventário menor para a confirmação
         String confirmTitle = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getConfirmGUITitle());
@@ -298,6 +352,12 @@ public class MenuClickListener implements Listener {
         if (world == null || !confirmingDeletion.containsKey(playerUUID) || !confirmingDeletion.get(playerUUID)) {
             player.closeInventory();
             return;
+        }
+
+        // DEBUG log
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("[DEBUG] MenuClickListener: Tratando confirmação de exclusão, slot: " +
+                    slot + ", mundo: " + world.getName());
         }
 
         // Reseta o estado de confirmação

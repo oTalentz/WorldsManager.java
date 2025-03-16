@@ -32,6 +32,15 @@ public class MessagingManager {
     public MessagingManager(WorldsManager plugin) {
         this.plugin = plugin;
 
+        // Registrar canais imediatamente ao inicializar
+        if (plugin.getConfigManager().isCrossServerMode()) {
+            // Verificar se já está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
+                plugin.getLogger().info("Canal BungeeCord registrado pelo MessagingManager");
+            }
+        }
+
         // Log para ajudar na depuração
         plugin.getLogger().info("MessagingManager inicializado.");
     }
@@ -51,8 +60,13 @@ public class MessagingManager {
             }
 
             // Log para debug
-            if (plugin.getConfigManager().isDebugEnabled()) {
-                plugin.getLogger().info("Preparando mensagem de criação de mundo: " + world.getWorldName());
+            plugin.getLogger().info("Preparando mensagem de criação de mundo: " + world.getWorldName());
+            plugin.getLogger().info("Servidor de destino: " + plugin.getConfigManager().getWorldsServerName());
+
+            // Verificar se o canal está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando agora...");
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
             }
 
             ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -93,6 +107,8 @@ public class MessagingManager {
             return true;
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Erro ao enviar mensagem de criação de mundo", e);
+            // Notifica o jogador sobre a falha
+            requester.sendMessage(ChatColor.RED + "Erro ao enviar mensagem para o servidor de mundos: " + e.getMessage());
             return false;
         }
     }
@@ -112,6 +128,12 @@ public class MessagingManager {
             }
 
             plugin.getLogger().info("Iniciando processo de teleporte para " + player.getName() + " para o mundo " + worldName);
+
+            // Verificar se o canal está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando agora...");
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
+            }
 
             // Primeiro envie a mensagem de teleporte para o servidor de destino
             ByteArrayOutputStream msgBytes = new ByteArrayOutputStream();
@@ -160,6 +182,8 @@ public class MessagingManager {
             return true;
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Erro ao enviar mensagem de teleporte", e);
+            // Notifica o jogador sobre a falha
+            player.sendMessage(ChatColor.RED + "Erro ao teleportar para o servidor de mundos: " + e.getMessage());
             return false;
         }
     }
@@ -184,6 +208,12 @@ public class MessagingManager {
                     Player anyPlayer = Bukkit.getOnlinePlayers().iterator().next();
 
                     try {
+                        // Verifica se o canal está registrado
+                        if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                            plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando novamente...");
+                            plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
+                        }
+
                         // Envia uma nova mensagem de teleporte
                         ByteArrayOutputStream msgBytes = new ByteArrayOutputStream();
                         DataOutputStream msgOut = new DataOutputStream(msgBytes);
@@ -220,6 +250,13 @@ public class MessagingManager {
                 // Removemos da lista de tentativas quando atingir o limite
                 teleportAttempts.remove(playerUUID);
                 plugin.getLogger().warning("Número máximo de tentativas de teleporte atingido para " + playerUUID);
+
+                // Tenta notificar o jogador se ele estiver online
+                Player player = Bukkit.getPlayer(playerUUID);
+                if (player != null && player.isOnline()) {
+                    player.sendMessage(ChatColor.RED + "Falha ao completar o teleporte após " + MAX_TELEPORT_ATTEMPTS + " tentativas.");
+                    player.sendMessage(ChatColor.YELLOW + "Tente novamente ou contate um administrador.");
+                }
             }
         }, delay); // Usa o delay configurado
     }
@@ -236,6 +273,12 @@ public class MessagingManager {
             if (player == null || !player.isOnline()) {
                 plugin.getLogger().warning("Tentativa de enviar mensagem com jogador offline ou nulo");
                 return false;
+            }
+
+            // Verificar se o canal está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando agora...");
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
             }
 
             // Log para debug
@@ -266,6 +309,8 @@ public class MessagingManager {
             return true;
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Erro ao enviar mensagem de exclusão de mundo", e);
+            // Notifica o jogador sobre a falha
+            player.sendMessage(ChatColor.RED + "Erro ao enviar comando de exclusão: " + e.getMessage());
             return false;
         }
     }
@@ -283,6 +328,12 @@ public class MessagingManager {
             if (player == null || !player.isOnline()) {
                 plugin.getLogger().warning("Tentativa de enviar mensagem com jogador offline ou nulo");
                 return false;
+            }
+
+            // Verificar se o canal está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando agora...");
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
             }
 
             // Log para debug
@@ -316,6 +367,8 @@ public class MessagingManager {
             return true;
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Erro ao enviar mensagem de atualização de configurações", e);
+            // Notifica o jogador sobre a falha
+            player.sendMessage(ChatColor.RED + "Erro ao atualizar configurações: " + e.getMessage());
             return false;
         }
     }
@@ -350,5 +403,26 @@ public class MessagingManager {
 
         // Escreve o modo de jogo
         out.writeUTF(settings.getGameMode() != null ? settings.getGameMode().name() : "SURVIVAL");
+    }
+
+    /**
+     * Verifica se os canais necessários estão registrados
+     * @return true se tudo estiver corretamente registrado
+     */
+    public boolean checkChannelsRegistered() {
+        boolean outgoing = plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL);
+        boolean incoming = plugin.getServer().getMessenger().isIncomingChannelRegistered(plugin, BUNGEE_CHANNEL);
+
+        if (!outgoing) {
+            plugin.getLogger().severe("Canal BungeeCord não está registrado para saída!");
+            return false;
+        }
+
+        if (!incoming) {
+            plugin.getLogger().severe("Canal BungeeCord não está registrado para entrada!");
+            return false;
+        }
+
+        return true;
     }
 }
