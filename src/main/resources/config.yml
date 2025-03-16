@@ -9,8 +9,8 @@ database:
   host: glacier.lowping.host
   port: 3306
   name: s39_MinevoxelWorlds
-  user: u39_UVeIyna5Ii
-  password: ^HBFP@EdP6JCFG^0PyzUoJa
+  user: u39_UVelynaSli
+  password: ^HBFP@EdP6JCFG^0PyzUoJa.
   # Prefixo para tabelas
   table-prefix: wm_
   # Opções de conexão
@@ -28,6 +28,10 @@ worlds:
   environment: NORMAL
   # Gerar estruturas (aldeias, templos, etc.)
   generate-structures: true
+  # Pasta onde os mundos são armazenados
+  worlds-folder: "Mundos"
+  # Prefixo para os diretórios de mundos
+  player-folder-prefix: true
 
   # Configurações padrão para novos mundos
   default-settings:
@@ -47,7 +51,7 @@ worlds:
     fire-spread: true
     leaf-decay: true
     block-updates: true
-    game-mode: SURVIVAL
+    game-mode: CREATIVE
 
 # Limites
 limits:

@@ -425,4 +425,45 @@ public class MessagingManager {
 
         return true;
     }
+
+    /**
+     * Envia um jogador para outro servidor no BungeeCord
+     *
+     * @param player Jogador a ser enviado
+     * @param server Nome do servidor de destino
+     * @return true se a mensagem foi enviada com sucesso
+     */
+    public boolean sendPlayerToServer(Player player, String server) {
+        try {
+            if (player == null || !player.isOnline()) {
+                plugin.getLogger().warning("Tentativa de enviar jogador offline ou nulo para outro servidor");
+                return false;
+            }
+
+            plugin.getLogger().info("Enviando jogador " + player.getName() + " para o servidor: " + server);
+
+            // Verificar se o canal está registrado
+            if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
+                plugin.getLogger().severe("Canal BungeeCord não está registrado! Registrando agora...");
+                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
+            }
+
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(b);
+
+            out.writeUTF("Connect");
+            out.writeUTF(server);
+
+            player.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+            plugin.getLogger().info("Jogador " + player.getName() + " enviado para o servidor: " + server);
+
+            return true;
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Erro ao enviar jogador para outro servidor", e);
+            if (player != null && player.isOnline()) {
+                player.sendMessage(ChatColor.RED + "Erro ao conectar ao servidor de mundos: " + e.getMessage());
+            }
+            return false;
+        }
+    }
 }

@@ -9,6 +9,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
@@ -16,6 +17,7 @@ import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -116,29 +118,70 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         // Lê as configurações do mundo
         WorldSettings settings = readWorldSettings(in);
 
+        // Determina o nome do jogador para o caminho personalizado
+        String playerName = "unknown";
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(ownerUUID);
+        if (offlinePlayer.getName() != null) {
+            playerName = offlinePlayer.getName().toLowerCase();
+        }
+
+        // Define o caminho personalizado na pasta Mundos
+        String worldPath = "Mundos/" + playerName;
+
+        // Garante que o diretório existe
+        File worldDir = new File(Bukkit.getWorldContainer().getParentFile(), worldPath);
+        if (!worldDir.exists()) {
+            worldDir.mkdirs();
+        }
+
         // Verifica se o mundo já existe
         if (Bukkit.getWorld(worldName) != null) {
             plugin.getLogger().warning("Tentativa de criar um mundo que já existe: " + worldName);
+
+            // Notifica o jogador
+            Player owner = Bukkit.getPlayer(ownerUUID);
+            if (owner != null) {
+                owner.sendMessage(ChatColor.YELLOW + "Este mundo já existe. Teleportando para ele...");
+                owner.teleport(Bukkit.getWorld(worldName).getSpawnLocation());
+            }
             return;
         }
+
+        // Registra nos logs
+        plugin.getLogger().info("Criando mundo: " + worldName + " para jogador: " + playerName);
+        plugin.getLogger().info("Caminho de criação: " + worldPath);
+
+        final String finalPlayerName = playerName;
+        final String finalWorldPath = worldPath;
 
         // Executa a criação de mundo de forma assíncrona
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                // Cria o mundo usando bukkit
-                World world = WorldCreationUtils.createWorld(worldName,
+                // Cria o mundo usando o método personalizado
+                World world = WorldCreationUtils.createWorldInPath(
+                        worldName,
+                        finalWorldPath,
                         plugin.getConfigManager().getWorldType(),
                         plugin.getConfigManager().getWorldEnvironment(),
                         plugin.getConfigManager().isGenerateStructures());
 
                 if (world == null) {
                     plugin.getLogger().severe("Falha ao criar o mundo: " + worldName);
+
+                    // Notifica o jogador sobre a falha
+                    Player owner = Bukkit.getPlayer(ownerUUID);
+                    if (owner != null) {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            owner.sendMessage(ChatColor.RED + "Falha ao criar seu mundo! Tente novamente mais tarde.");
+                        });
+                    }
                     return;
                 }
 
-                // Cria o objeto CustomWorld
+                // Cria o objeto CustomWorld com o caminho personalizado
                 CustomWorld customWorld = new CustomWorld(displayName, ownerUUID, worldName, icon);
                 customWorld.setSettings(settings);
+                customWorld.setWorldPath(finalWorldPath);
 
                 // Aplica as configurações ao mundo na próxima tick (thread principal)
                 Bukkit.getScheduler().runTask(plugin, () -> {
@@ -150,16 +193,39 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
                     // Adiciona aos mundos carregados
                     plugin.getWorldManager().addLoadedWorld(customWorld);
 
-                    plugin.getLogger().info("Mundo criado com sucesso: " + worldName);
+                    plugin.getLogger().info("Mundo criado com sucesso: " + worldName + " para jogador " + finalPlayerName);
 
                     // Notifica o proprietário se estiver online
                     Player owner = Bukkit.getPlayer(ownerUUID);
                     if (owner != null) {
                         owner.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("world-created-success"));
+
+                        // Teleporta o jogador para o mundo recém-criado após um breve delay
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                            if (owner.isOnline()) {
+                                owner.sendMessage(ChatColor.GREEN + "Teleportando para seu novo mundo: " + displayName);
+                                customWorld.teleportPlayer(owner);
+
+                                // Configura o jogador para modo criativo
+                                owner.setGameMode(GameMode.CREATIVE);
+
+                                // Mensagem de bem-vindo
+                                owner.sendMessage(ChatColor.GREEN + "Bem-vindo ao seu novo mundo! Você está no modo criativo.");
+                                owner.sendMessage(ChatColor.YELLOW + "Use /worlds para gerenciar seus mundos.");
+                            }
+                        }, 20L); // 1 segundo de delay
                     }
                 });
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Erro ao criar mundo via mensagem cross-server", e);
+
+                // Notifica o jogador sobre a falha
+                Player owner = Bukkit.getPlayer(ownerUUID);
+                if (owner != null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        owner.sendMessage(ChatColor.RED + "Erro ao criar seu mundo: " + e.getMessage());
+                    });
+                }
             }
         });
     }
@@ -182,12 +248,32 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
                 return;
             }
 
+            // Verifica se o mundo está disponível no servidor atual
             World world = Bukkit.getWorld(worldName);
+
+            // Tenta carregar o mundo se não estiver carregado
+            if (world == null) {
+                // Tenta encontrar o mundo personalizado
+                CustomWorld customWorld = plugin.getWorldManager().getWorldByName(worldName);
+
+                if (customWorld != null) {
+                    // Tenta carregar do caminho personalizado
+                    world = WorldCreationUtils.loadWorldFromPath(worldName, customWorld.getWorldPath());
+                }
+
+                // Se ainda for nulo, tenta carregar normalmente
+                if (world == null) {
+                    world = WorldCreationUtils.loadWorld(worldName);
+                }
+            }
+
+            // Verifica se o mundo foi carregado com sucesso
             if (world == null) {
                 player.sendMessage(ChatColor.RED + plugin.getLanguageManager().getMessage("world-not-found"));
                 return;
             }
 
+            // Teleporta o jogador
             Location spawnLocation = world.getSpawnLocation();
             player.teleport(spawnLocation);
             player.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("teleported-to-world")
@@ -195,10 +281,16 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
 
             // Aplica modo de jogo se necessário
             CustomWorld customWorld = plugin.getWorldManager().getWorldByName(worldName);
-            if (customWorld != null && !player.hasPermission("worldsmanager.gamemode.bypass")) {
-                GameMode gameMode = customWorld.getSettings().getGameMode();
-                if (gameMode != null) {
-                    player.setGameMode(gameMode);
+            if (customWorld != null) {
+                if (customWorld.getOwnerUUID().equals(playerUUID)) {
+                    // Proprietário recebe o modo criativo
+                    player.setGameMode(GameMode.CREATIVE);
+                } else if (!player.hasPermission("worldsmanager.gamemode.bypass")) {
+                    // Outros jogadores recebem o modo definido nas configurações
+                    GameMode gameMode = customWorld.getSettings().getGameMode();
+                    if (gameMode != null) {
+                        player.setGameMode(gameMode);
+                    }
                 }
             }
         });

@@ -1,6 +1,7 @@
 package com.worldsmanager.models;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -23,6 +24,7 @@ public class CustomWorld {
     private WorldSettings settings;
     private List<UUID> trustedPlayers;
     private Location spawnPoint;
+    private String worldPath; // Caminho personalizado para o mundo
 
     /**
      * Construtor para mundos existentes
@@ -41,6 +43,7 @@ public class CustomWorld {
         this.icon = icon;
         this.settings = new WorldSettings();
         this.trustedPlayers = new ArrayList<>();
+        this.worldPath = null; // Inicialmente nulo, será definido se necessário
     }
 
     /**
@@ -88,6 +91,14 @@ public class CustomWorld {
 
         World world = getWorld();
         Location teleportLocation = (spawnPoint != null) ? spawnPoint : world.getSpawnLocation();
+
+        // Configura o modo de jogo apropriado
+        if (player.getUniqueId().equals(ownerUUID)) {
+            player.setGameMode(GameMode.CREATIVE);
+        } else if (settings != null && settings.getGameMode() != null) {
+            player.setGameMode(settings.getGameMode());
+        }
+
         return player.teleport(teleportLocation);
     }
 
@@ -189,5 +200,23 @@ public class CustomWorld {
 
     public Location getSpawnPoint() {
         return spawnPoint;
+    }
+
+    /**
+     * Obtém o caminho personalizado para o mundo
+     *
+     * @return Caminho personalizado ou nome do mundo se não definido
+     */
+    public String getWorldPath() {
+        return worldPath != null ? worldPath : worldName;
+    }
+
+    /**
+     * Define um caminho personalizado para o mundo
+     *
+     * @param worldPath Caminho personalizado
+     */
+    public void setWorldPath(String worldPath) {
+        this.worldPath = worldPath;
     }
 }

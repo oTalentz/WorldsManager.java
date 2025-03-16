@@ -171,6 +171,7 @@ public class DatabaseManager {
                         + "owner_uuid VARCHAR(36) NOT NULL,"
                         + "world_name VARCHAR(64) NOT NULL UNIQUE,"
                         + "icon VARCHAR(64) NOT NULL,"
+                        + "world_path VARCHAR(255),"
                         + "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
                         + "INDEX (owner_uuid)"
                         + ");";
@@ -219,6 +220,18 @@ public class DatabaseManager {
                         + "FOREIGN KEY (world_id) REFERENCES " + tablePrefix + "worlds(id) ON DELETE CASCADE"
                         + ");";
                 statement.executeUpdate(sql);
+            }
+
+            // Verificar se a coluna world_path existe, caso contrário adicioná-la
+            try (Statement statement = connection.createStatement()) {
+                try {
+                    ResultSet rs = statement.executeQuery("SELECT world_path FROM " + tablePrefix + "worlds LIMIT 1");
+                    rs.close(); // Coluna existe, não precisa fazer nada
+                } catch (SQLException e) {
+                    // Coluna não existe, vamos adicioná-la
+                    statement.executeUpdate("ALTER TABLE " + tablePrefix + "worlds ADD COLUMN world_path VARCHAR(255) AFTER icon");
+                    plugin.getLogger().info("Coluna world_path adicionada à tabela " + tablePrefix + "worlds");
+                }
             }
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Falha ao criar tabelas do banco de dados", e);
@@ -290,12 +303,13 @@ public class DatabaseManager {
     private int saveWorldData(CustomWorld world) throws SQLException {
         if (world.getId() == -1) {
             // Insere novo mundo
-            String sql = "INSERT INTO " + tablePrefix + "worlds (name, owner_uuid, world_name, icon) VALUES (?, ?, ?, ?)";
+            String sql = "INSERT INTO " + tablePrefix + "worlds (name, owner_uuid, world_name, icon, world_path) VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 statement.setString(1, world.getName());
                 statement.setString(2, world.getOwnerUUID().toString());
                 statement.setString(3, world.getWorldName());
                 statement.setString(4, world.getIcon().name());
+                statement.setString(5, world.getWorldPath());
                 statement.executeUpdate();
 
                 try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
@@ -308,11 +322,12 @@ public class DatabaseManager {
             }
         } else {
             // Atualiza mundo existente
-            String sql = "UPDATE " + tablePrefix + "worlds SET name = ?, icon = ? WHERE id = ?";
+            String sql = "UPDATE " + tablePrefix + "worlds SET name = ?, icon = ?, world_path = ? WHERE id = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, world.getName());
                 statement.setString(2, world.getIcon().name());
-                statement.setInt(3, world.getId());
+                statement.setString(3, world.getWorldPath());
+                statement.setInt(4, world.getId());
                 statement.executeUpdate();
                 return world.getId();
             }
@@ -479,7 +494,7 @@ public class DatabaseManager {
                 }
             }
 
-            String sql = "SELECT w.id, w.name, w.owner_uuid, w.world_name, w.icon, "
+            String sql = "SELECT w.id, w.name, w.owner_uuid, w.world_name, w.icon, w.world_path, "
                     + "s.game_mode, s.pvp_enabled, s.mob_spawning, s.redstone_enabled, s.physics_enabled, "
                     + "s.weather_enabled, s.fluid_flow, s.time_cycle, s.fixed_time, s.tick_speed "
                     + "FROM " + tablePrefix + "worlds w "
@@ -493,6 +508,7 @@ public class DatabaseManager {
                     String name = resultSet.getString("name");
                     UUID ownerUUID = UUID.fromString(resultSet.getString("owner_uuid"));
                     String worldName = resultSet.getString("world_name");
+                    String worldPath = resultSet.getString("world_path");
 
                     // Handle potentially invalid material names
                     Material icon;
@@ -505,6 +521,9 @@ public class DatabaseManager {
                     }
 
                     CustomWorld world = new CustomWorld(id, name, ownerUUID, worldName, icon);
+                    if (worldPath != null) {
+                        world.setWorldPath(worldPath);
+                    }
 
                     // Carrega configurações se disponíveis
                     if (resultSet.getString("game_mode") != null) {
