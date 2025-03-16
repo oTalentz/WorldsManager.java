@@ -1,0 +1,83 @@
+# English language file
+
+prefix: "&8[&aWorlds&8] &r"
+
+general:
+  no-permission: "&cYou don't have permission to use this command."
+  reload-success: "&aPlugin reloaded successfully."
+  player-only: "&cThis command can only be used by players."
+  world-not-found: "&cWorld not found."
+  player-not-found: "&cPlayer not found."
+  operation-success: "&aOperation completed successfully."
+  operation-failed: "&cOperation failed. Check console for details."
+  unknown-error: "&cAn unknown error occurred."
+
+worlds:
+  create:
+    success: "&aWorld &e{0}&a created successfully."
+    failed: "&cFailed to create world &e{0}&c."
+    limit-reached: "&cYou have reached the maximum number of worlds."
+    already-exists: "&cA world with that name already exists."
+
+  delete:
+    success: "&aWorld &e{0}&a deleted successfully."
+    failed: "&cFailed to delete world &e{0}&c."
+    confirmation: "&eAre you sure you want to delete this world? Type &c/worlds confirm&e to confirm."
+
+  teleport:
+    success: "&aTeleported to world &e{0}&a."
+    failed: "&cFailed to teleport to world &e{0}&c."
+
+  settings:
+    updated: "&aSetting &e{0}&a updated to &e{1}&a."
+    failed: "&cFailed to update setting &e{0}&c."
+
+  players:
+    added: "&aPlayer &e{0}&a added to world &e{1}&a."
+    removed: "&aPlayer &e{0}&a removed from world &e{1}&a."
+
+  download:
+    started: "&aWorld download started. This may take a while."
+    completed: "&aWorld download completed. File saved to &e{0}&a."
+    failed: "&cWorld download failed."
+
+  spawnpoint:
+    set: "&aSpawnpoint set for world &e{0}&a."
+    failed: "&cFailed to set spawnpoint for world &e{0}&c."
+
+gui:
+  worlds:
+    title: "Your Worlds"
+    create-button: "&aCreate New World"
+    world-item: "&b{0}"
+    world-lore:
+      - "&7Left-click to teleport"
+      - "&7Right-click to open settings"
+      - "&7Total trusted players: &e{1}"
+
+  settings:
+    title: "World Settings: {0}"
+    trusted-players: "&aTrusted Players"
+    delete-world: "&cDelete World"
+    reload-world: "&eReload World"
+    physics-toggle: "&bBlock Physics: &e{0}"
+    redstone-toggle: "&bRedstone: &e{0}"
+    weather-toggle: "&bWeather: &e{0}"
+    fluid-toggle: "&bFluid Flow: &e{0}"
+    time-set: "&bTime: &e{0}"
+    tick-speed: "&bTick Speed: &e{0}"
+    icon-change: "&bChange Icon"
+    spawnpoint: "&bSet Spawnpoint"
+    download: "&bDownload World"
+
+  players:
+    title: "Manage Players: {0}"
+    add-player: "&aAdd Player"
+    player-item: "&b{0}"
+    player-lore:
+      - "&7Right-click to remove"
+
+  admin:
+    title: "Admin Worlds Manager"
+    player-worlds: "&b{0}'s Worlds"
+    all-worlds: "&bAll Worlds"

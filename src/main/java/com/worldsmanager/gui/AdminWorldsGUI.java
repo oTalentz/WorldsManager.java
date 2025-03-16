@@ -1,4 +1,4 @@
-package worldsmanager.gui;
+package com.worldsmanager.gui;
 
 public class AdminWorldsGUI {
 }

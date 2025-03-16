@@ -1,0 +1,22 @@
+name: WorldsManager
+version: 1.0.0
+main: com.worldsmanager.WorldsManager
+api-version: 1.20
+authors: [YourName]
+description: A plugin for managing multiple worlds through a GUI interface
+commands:
+  worlds:
+    description: Open the Worlds GUI menu
+    usage: /<command>
+    aliases: [w, mundos]
+  worldsadm:
+    description: Admin commands for managing worlds
+    usage: /<command>
+    permission: worldsmanager.admin
+permissions:
+  worldsmanager.admin:
+    description: Allows access to admin commands
+    default: op
+  worldsmanager.use:
+    description: Allows access to basic world management
+    default: true

@@ -4,9 +4,11 @@ import com.worldsmanager.commands.WorldsAdminCommand;
 import com.worldsmanager.commands.WorldsCommand;
 import com.worldsmanager.listeners.MenuClickListener;
 import com.worldsmanager.listeners.WorldsListener;
+import com.worldsmanager.listeners.WorldsMessageListener;
 import com.worldsmanager.managers.ConfigManager;
 import com.worldsmanager.managers.DatabaseManager;
 import com.worldsmanager.managers.LanguageManager;
+import com.worldsmanager.managers.MessagingManager;
 import com.worldsmanager.managers.WorldManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
@@ -29,11 +31,13 @@ public class WorldsManager extends JavaPlugin {
     private ConfigManager configManager;
     private LanguageManager languageManager;
     private DatabaseManager databaseManager;
+    private MessagingManager messagingManager; // Movido antes de worldManager
     private WorldManager worldManager;
 
     // Listeners
     private MenuClickListener menuClickListener;
     private WorldsListener worldsListener;
+    private WorldsMessageListener worldsMessageListener;
 
     // Executores de comando
     private WorldsCommand worldsCommand;
@@ -51,6 +55,9 @@ public class WorldsManager extends JavaPlugin {
             // Conecta ao banco de dados
             connectDatabase();
 
+            // Registra comunicação entre servidores
+            setupCrossServerCommunication();
+
             // Registra comandos
             registerCommands();
 
@@ -63,6 +70,7 @@ public class WorldsManager extends JavaPlugin {
             getLogger().info("=======================");
             getLogger().info("WorldsManager Ativado!");
             getLogger().info("Versão: " + getDescription().getVersion());
+            getLogger().info("Modo: " + (configManager.isCrossServerMode() ? "Cross-Server" : "Standalone"));
             getLogger().info("=======================");
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Erro ao inicializar o plugin WorldsManager", e);
@@ -73,6 +81,12 @@ public class WorldsManager extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Desregistra canais de plugin messaging
+        if (getServer() != null && getServer().getMessenger() != null) {
+            getServer().getMessenger().unregisterOutgoingPluginChannel(this);
+            getServer().getMessenger().unregisterIncomingPluginChannel(this);
+        }
+
         // Salva todos os mundos antes de desativar o plugin
         if (worldManager != null) {
             worldManager.saveAllWorlds();
@@ -96,6 +110,9 @@ public class WorldsManager extends JavaPlugin {
         configManager.reloadConfig();
         languageManager.reload();
 
+        // Recarrega comunicação cross-server
+        setupCrossServerCommunication();
+
         // Recarrega todos os mundos
         worldManager.reloadAllWorlds();
 
@@ -110,7 +127,26 @@ public class WorldsManager extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         this.languageManager = new LanguageManager(this);
         this.databaseManager = new DatabaseManager(this);
+        this.messagingManager = new MessagingManager(this); // Inicializa o MessagingManager antes do WorldManager
         this.worldManager = new WorldManager(this);
+    }
+
+    /**
+     * Configura a comunicação entre servidores
+     */
+    private void setupCrossServerCommunication() {
+        // Desregistra canais existentes
+        getServer().getMessenger().unregisterOutgoingPluginChannel(this);
+        getServer().getMessenger().unregisterIncomingPluginChannel(this);
+
+        // Registra novos canais se o modo cross-server estiver ativado
+        if (configManager.isCrossServerMode()) {
+            // Registra o canal BungeeCord
+            getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+            getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", new WorldsMessageListener(this));
+
+            getLogger().info("Comunicação entre servidores configurada com sucesso!");
+        }
     }
 
     /**
@@ -217,6 +253,10 @@ public class WorldsManager extends JavaPlugin {
 
     public WorldManager getWorldManager() {
         return worldManager;
+    }
+
+    public MessagingManager getMessagingManager() {
+        return messagingManager;
     }
 
     /**

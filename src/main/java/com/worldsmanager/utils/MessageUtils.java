@@ -1,4 +1,4 @@
-package worldsmanager.utils;
+package com.worldsmanager.utils;
 
 public class MessageUtils {
 }

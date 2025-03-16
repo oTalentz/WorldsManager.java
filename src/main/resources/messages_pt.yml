@@ -1,0 +1,67 @@
+# Arquivo de mensagens em Português
+# WorldsManager
+
+# Mensagens gerais
+prefix: "&8[&bWorldManager&8]&r "
+no-permission: "Você não tem permissão para isso."
+players-only: "Este comando só pode ser usado por jogadores."
+unknown-command: "Comando desconhecido. Use /worlds help para ver os comandos disponíveis."
+world-not-found: "Mundo não encontrado."
+world-load-failed: "Falha ao carregar o mundo."
+no-access-to-world: "Você não tem acesso a este mundo."
+no-worlds: "Você não possui nenhum mundo."
+
+# Mensagens do menu
+opening-menu: "Abrindo menu de mundos..."
+enter-world-name: "&aPor favor, digite o nome do seu novo mundo no chat."
+cancel-prompt: "&7Digite 'cancel' para cancelar."
+invalid-world-name-length: "&cO nome do mundo deve ter entre 3 e 16 caracteres."
+invalid-world-name-chars: "&cO nome do mundo só pode conter letras, números e underscores."
+world-name-exists: "&cJá existe um mundo com este nome."
+world-creation-cancelled: "&eA criação do mundo foi cancelada."
+settings-menu-not-implemented: "&eO menu de configurações ainda não está disponível."
+players-menu-not-implemented: "&eO menu de jogadores ainda não está disponível."
+
+# Mensagens de criação e gerenciamento de mundos
+creating-world: "&aCriando mundo &b%name%&a..."
+world-creation-requested: "&aA criação do mundo foi solicitada. Por favor, aguarde..."
+world-created-success: "&aMundo criado com sucesso!"
+world-creation-failed: "&cFalha ao criar o mundo."
+world-creation-error: "&cOcorreu um erro durante a criação do mundo."
+teleporting: "&aTeleportando para &b%world%&a..."
+teleported-to-world: "&aVocê foi teleportado para &b%world%&a!"
+
+# Mensagens de exclusão de mundo
+confirm-world-deletion: "&cVocê tem certeza que deseja excluir o mundo &e%world%&c?"
+confirm-world-deletion-warning: "&cEsta ação não pode ser desfeita!"
+confirm-world-deletion-confirm: "&ePara confirmar, clique novamente no botão de exclusão."
+confirm-world-deletion-cancel: "&aPara cancelar, clique em qualquer outro lugar ou feche o menu."
+world-deletion-cancelled: "&eA exclusão do mundo foi cancelada."
+world-deleted-success: "&aO mundo foi excluído com sucesso!"
+world-deletion-failed: "&cFalha ao excluir o mundo."
+
+# Mensagens de lista
+world-list-header: "&aLista de seus mundos:"
+owner: "Proprietário"
+
+# Mensagens de ajuda
+help-header: "Ajuda do WorldsManager"
+help-main: "Abre o menu principal"
+help-create: "Cria um novo mundo"
+help-teleport: "Teleporta para um mundo"
+help-list: "Lista seus mundos"
+help-help: "Mostra esta mensagem de ajuda"
+
+# Mensagens de economia
+not-enough-money: "&cVocê não tem dinheiro suficiente. Custo: $%cost%"
+not-enough-money-teleport: "&cVocê não tem dinheiro suficiente para teleportar. Custo: $%cost%"
+
+# Mensagens de limite
+world-limit-reached: "&cVocê atingiu o limite de mundos (%limit%)."
+specify-world: "&cPor favor, especifique o nome do mundo."
+invalid-icon: "&cEste item não pode ser usado como ícone."
+
+# Mensagens de confirmação
+confirm-title: "&cConfirmar exclusão"
+confirm-yes: "&aConfirmar"
+confirm-no: "&cCancelar"

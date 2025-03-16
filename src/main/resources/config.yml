@@ -1,0 +1,235 @@
+# WorldsManager - Configuração
+
+# Configurações de Database
+database:
+  enabled: true
+  # Tipos suportados: mysql, sqlite
+  type: mysql
+  # Configurações para MySQL
+  host: glacier.lowping.host
+  port: 3306
+  name: s39_MinevoxelWorlds
+  user: u39_mcZQDt16cW
+  password: 7w@z^LNbhB=g^A6UaO0V!@RV
+  # Prefixo para tabelas
+  table-prefix: wm_
+  # Opções de conexão
+  connection-pool:
+    min-size: 5
+    max-size: 10
+    timeout: 30000
+    keep-alive: 300000
+
+# Configurações de mundos
+worlds:
+  # Tipo de mundo (NORMAL, FLAT, LARGE_BIOMES, AMPLIFIED)
+  type: NORMAL
+  # Ambiente (NORMAL, NETHER, THE_END)
+  environment: NORMAL
+  # Gerar estruturas (aldeias, templos, etc.)
+  generate-structures: true
+
+  # Configurações padrão para novos mundos
+  default-settings:
+    pvp: false
+    mob-spawning: true
+    time-cycle: true
+    fixed-time: 6000
+    weather: true
+    physics: true
+    redstone: true
+    fluid-flow: true
+    tick-speed: 3
+    keep-inventory: true
+    announce-deaths: true
+    fall-damage: true
+    hunger-depletion: true
+    fire-spread: true
+    leaf-decay: true
+    block-updates: true
+    game-mode: SURVIVAL
+
+# Limites
+limits:
+  # Número máximo de mundos por jogador (0 = ilimitado)
+  max-worlds-per-player: 0
+  # Número máximo de jogadores confiáveis por mundo
+  max-trusted-players: 20
+  # Tamanho máximo para mundos em MB (0 = ilimitado)
+  max-world-size: 0
+  # Tempo mínimo entre criações de mundos (em segundos)
+  creation-cooldown: 0
+
+# Configurações de economia (requer Vault)
+economy:
+  enabled: false
+  # Custo para criar um mundo
+  world-creation-cost: 0.0
+  # Custo para teleportar para um mundo
+  world-teleport-cost: 0.0
+  # Custo para adicionar jogadores confiáveis
+  add-trusted-player-cost: 0.0
+  # Custo para alterar configurações
+  change-settings-cost: 0.0
+
+# Configurações de BungeeCord/Cross-Server
+cross-server:
+  # Ativar modo multi-servidor
+  enabled: true
+  # Nome do servidor onde os mundos serão criados fisicamente
+  worlds-server: "Worlds-1"
+  # Teleportar automaticamente o jogador ao criar um mundo
+  auto-teleport: true
+  # Tempo de espera entre envio e teleporte (em ticks)
+  teleport-delay: 40
+  # Número máximo de tentativas para o teleporte
+  teleport-max-attempts: 5
+  # Verificação de integridade entre servidores
+  integrity-check:
+    enabled: true
+    interval: 3600 # Em segundos (1 hora)
+
+# Configurações de segurança
+security:
+  # Ativação de token para comunicação segura
+  use-token: false
+  # Prefixo para mundos (evita conflitos com outros plugins)
+  world-prefix: "wm_"
+  # Ações bloqueadas nos mundos que não pertencem ao jogador
+  blocked-actions:
+    - BLOCK_BREAK
+    - BLOCK_PLACE
+    - BUCKET_EMPTY
+    - BUCKET_FILL
+    - FLINT_AND_STEEL
+
+# Ícones
+icons:
+  # Materiais que não podem ser usados como ícones
+  blacklist:
+    - AIR
+    - BARRIER
+    - STRUCTURE_VOID
+  # Ícones disponíveis no menu de seleção
+  available:
+    - GRASS_BLOCK
+    - STONE
+    - SAND
+    - DIRT
+    - GOLD_BLOCK
+    - DIAMOND_BLOCK
+    - EMERALD_BLOCK
+    - REDSTONE_BLOCK
+    - IRON_BLOCK
+    - COAL_BLOCK
+    - OAK_LOG
+    - WATER_BUCKET
+    - LAVA_BUCKET
+    - SNOW_BLOCK
+    - PUMPKIN
+    - MELON
+    - CACTUS
+    - TNT
+    - CHEST
+    - CRAFTING_TABLE
+    - FURNACE
+    - BOOKSHELF
+    - ENDER_CHEST
+    - ANVIL
+    - ENCHANTING_TABLE
+
+# Configurações de interface
+gui:
+  # Título do menu principal
+  main-title: "&8Seus Mundos"
+  # Título do menu de criação
+  create-title: "&8Criar Novo Mundo"
+  # Título do menu de configurações
+  settings-title: "&8Configurações do Mundo"
+  # Título do menu de jogadores
+  players-title: "&8Gerenciar Jogadores"
+  # Título do menu de administração
+  admin-title: "&8Administração de Mundos"
+  # Título do menu de confirmação de exclusão
+  confirm-title: "&cConfirmar Exclusão"
+
+  # Itens por página no menu principal
+  items-per-page: 45
+  # Número de linhas no menu principal
+  main-rows: 6
+
+  # Material do botão de criação
+  create-button-material: EMERALD_BLOCK
+  # Posição do botão de criação
+  create-button-slot: 49
+
+  # Use true para usar símbolos Unicode para botões, false para usar materiais do Minecraft
+  use-unicode-buttons: false
+
+  # Cores do tema da interface
+  colors:
+    primary: "&a"   # Verde
+    secondary: "&b" # Azul claro
+    accent: "&e"    # Amarelo
+    warning: "&c"   # Vermelho
+    info: "&7"      # Cinza
+
+# Configurações de desempenho
+performance:
+  # Intervalo para salvar dados do mundo (em segundos)
+  autosave-interval: 300
+  # Descarregar mundos não utilizados (em minutos, 0 = desativado)
+  unload-unused-worlds: 30
+  # Threshold para compactação de mundo (em dias, 0 = desativado)
+  world-compression-days: 7
+  # Usar threads assíncronas para operações pesadas
+  async-operations: true
+  # Limite de entidades por chunk nos mundos gerenciados
+  entity-limit-per-chunk: 50
+
+# Configurações de mensagens
+messages:
+  # Idioma padrão (en, pt)
+  default-language: pt
+  # Usar prefixo nas mensagens
+  use-prefix: true
+  # Prefixo do plugin
+  prefix: "&8[&bWorldManager&8] &r"
+  # Exibir mensagens de debug
+  show-debug: true
+
+# Configurações de permissões
+permissions:
+  # Se verdadeiro, qualquer jogador pode criar mundos
+  allow-all-players-to-create: true
+  # Permissão necessária para criar mundos (ignorado se allow-all-players-to-create for true)
+  create: "worldsmanager.create"
+  # Permissão para teleporte gratuito
+  free-teleport: "worldsmanager.teleport.free"
+  # Permissão para número ilimitado de mundos
+  unlimited-worlds: "worldsmanager.create.unlimited"
+  # Permissão para ignorar o gamemode do mundo
+  gamemode-bypass: "worldsmanager.gamemode.bypass"
+
+# Configurações de compatibilidade
+compatibility:
+  # Suporte a Multiverse (desativa funções que possam conflitar)
+  multiverse-support: false
+  # Suporte a My Worlds (desativa funções que possam conflitar)
+  myworlds-support: false
+  # Lista de plugins com integração
+  integrations:
+    - GriefPrevention
+    - WorldEdit
+    - WorldGuard
+
+# Configurações de depuração
+debug:
+  # Ativar modo de depuração
+  enabled: true
+  # Nível de depuração (1-3)
+  level: 3
+  # Logs para arquivo separado
+  separate-log-file: true
+  # Logs de comunicação entre servidores
+  log-plugin-messages: true

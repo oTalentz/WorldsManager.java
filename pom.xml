@@ -4,14 +4,107 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
-    <artifactId>WorldsManager.java</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <groupId>com.worldsmanager</groupId>
+    <artifactId>WorldsManager</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>WorldsManager</name>
+    <description>Um plugin para gerenciar múltiplos mundos através de interface GUI</description>
 
     <properties>
-        <maven.compiler.source>22</maven.compiler.source>
-        <maven.compiler.target>22</maven.compiler.target>
+        <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <repositories>
+        <!-- Spigot Repository -->
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- Spigot API -->
+        <dependency>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- MySQL Connector -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.33</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- HikariCP - Pool de conexões para melhor performance -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.0.1</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Lombok para reduzir código boilerplate (opcional) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.name}-${project.version}</finalName>
+        <defaultGoal>clean package</defaultGoal>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!-- Relocações para evitar conflitos com outras bibliotecas -->
+                            <relocations>
+                                <relocation>
+                                    <pattern>com.zaxxer.hikari</pattern>
+                                    <shadedPattern>com.worldsmanager.libs.hikari</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.mysql</pattern>
+                                    <shadedPattern>com.worldsmanager.libs.mysql</shadedPattern>
+                                </relocation>
+                            </relocations>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

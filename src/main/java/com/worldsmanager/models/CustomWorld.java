@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Representa um mundo customizado gerenciado pelo plugin
+ */
 public class CustomWorld {
 
     private int id;
@@ -21,6 +24,15 @@ public class CustomWorld {
     private List<UUID> trustedPlayers;
     private Location spawnPoint;
 
+    /**
+     * Construtor para mundos existentes
+     *
+     * @param id ID no banco de dados
+     * @param name Nome amigável do mundo
+     * @param ownerUUID UUID do dono
+     * @param worldName Nome interno do mundo
+     * @param icon Material do ícone
+     */
     public CustomWorld(int id, String name, UUID ownerUUID, String worldName, Material icon) {
         this.id = id;
         this.name = name;
@@ -31,20 +43,44 @@ public class CustomWorld {
         this.trustedPlayers = new ArrayList<>();
     }
 
+    /**
+     * Construtor para novos mundos
+     *
+     * @param name Nome amigável do mundo
+     * @param ownerUUID UUID do dono
+     * @param worldName Nome interno do mundo
+     * @param icon Material do ícone
+     */
     public CustomWorld(String name, UUID ownerUUID, String worldName, Material icon) {
         this(-1, name, ownerUUID, worldName, icon);
     }
 
-    // World operations
+    // Operações de mundo
 
+    /**
+     * Verifica se o mundo está carregado
+     *
+     * @return true se o mundo está carregado
+     */
     public boolean isLoaded() {
         return Bukkit.getWorld(worldName) != null;
     }
 
+    /**
+     * Obtém a instância do mundo
+     *
+     * @return Instância do mundo ou null se não estiver carregado
+     */
     public World getWorld() {
         return Bukkit.getWorld(worldName);
     }
 
+    /**
+     * Teleporta um jogador para este mundo
+     *
+     * @param player Jogador para teleportar
+     * @return true se o teleporte foi bem-sucedido
+     */
     public boolean teleportPlayer(Player player) {
         if (!isLoaded()) {
             return false;
@@ -55,22 +91,44 @@ public class CustomWorld {
         return player.teleport(teleportLocation);
     }
 
+    /**
+     * Verifica se um jogador pode acessar este mundo
+     *
+     * @param player Jogador para verificar
+     * @return true se o jogador pode acessar
+     */
     public boolean canAccess(Player player) {
         return player.getUniqueId().equals(ownerUUID) ||
                 trustedPlayers.contains(player.getUniqueId()) ||
                 player.hasPermission("worldsmanager.admin");
     }
 
+    /**
+     * Adiciona um jogador confiável
+     *
+     * @param playerUUID UUID do jogador
+     */
     public void addTrustedPlayer(UUID playerUUID) {
         if (!trustedPlayers.contains(playerUUID)) {
             trustedPlayers.add(playerUUID);
         }
     }
 
+    /**
+     * Remove um jogador confiável
+     *
+     * @param playerUUID UUID do jogador
+     */
     public void removeTrustedPlayer(UUID playerUUID) {
         trustedPlayers.remove(playerUUID);
     }
 
+    /**
+     * Define o ponto de spawn
+     *
+     * @param location Localização do spawn
+     * @return true se bem-sucedido
+     */
     public boolean setSpawnPoint(Location location) {
         if (location.getWorld().getName().equals(worldName)) {
             this.spawnPoint = location;
@@ -79,7 +137,7 @@ public class CustomWorld {
         return false;
     }
 
-    // Getters and Setters
+    // Getters e Setters
 
     public int getId() {
         return id;
@@ -131,9 +189,5 @@ public class CustomWorld {
 
     public Location getSpawnPoint() {
         return spawnPoint;
-    }
-
-    public void setSpawnPoint(Location spawnPoint) {
-        this.spawnPoint = spawnPoint;
     }
 }
