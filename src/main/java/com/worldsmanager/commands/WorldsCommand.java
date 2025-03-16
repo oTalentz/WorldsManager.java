@@ -254,20 +254,61 @@ public class WorldsCommand implements CommandExecutor {
             plugin.getLogger().info("[DEBUG] Comando de listagem de mundos por " + player.getName());
         }
 
-        List<CustomWorld> accessibleWorlds = plugin.getWorldManager().getAccessibleWorlds(player.getUniqueId());
+        // Use a versão interativa com cliques
+        handleInteractiveListCommand(player);
+    }
 
-        if (accessibleWorlds.isEmpty()) {
-            player.sendMessage(ChatColor.YELLOW + languageManager.getMessage("no-worlds"));
+    /**
+     * Versão interativa do comando de listagem com cliques
+     *
+     * @param player Jogador
+     */
+    private void handleInteractiveListCommand(Player player) {
+        List<String> formattedWorlds = plugin.getWorldManager().getFormattedWorldList(player);
+
+        if (formattedWorlds.isEmpty()) {
+            player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("no-worlds"));
             return;
         }
 
-        player.sendMessage(ChatColor.GREEN + languageManager.getMessage("world-list-header"));
+        player.sendMessage(ChatColor.GREEN + "=== " + plugin.getLanguageManager().getMessage("world-list-header") + " ===");
 
-        for (CustomWorld world : accessibleWorlds) {
-            String ownerStatus = world.getOwnerUUID().equals(player.getUniqueId()) ?
-                    ChatColor.GOLD + " (" + languageManager.getMessage("owner") + ")" : "";
+        // Envie mensagens clicáveis para cada mundo
+        for (String worldInfo : formattedWorlds) {
+            // Extraia o nome do mundo do formato
+            String displayName = worldInfo;
+            String technicalName = "";
 
-            player.sendMessage(ChatColor.GREEN + "- " + world.getName() + ownerStatus);
+            // Extrai o nome técnico entre colchetes
+            int bracketStart = worldInfo.lastIndexOf("[");
+            int bracketEnd = worldInfo.lastIndexOf("]");
+
+            if (bracketStart > 0 && bracketEnd > bracketStart) {
+                technicalName = worldInfo.substring(bracketStart + 1, bracketEnd);
+                displayName = worldInfo.substring(0, bracketStart);
+            }
+
+            // Crie um componente de texto clicável
+            net.md_5.bungee.api.chat.TextComponent message = new net.md_5.bungee.api.chat.TextComponent(displayName);
+
+            // Adicione ação de clique para teleportar
+            net.md_5.bungee.api.chat.ClickEvent clickEvent = new net.md_5.bungee.api.chat.ClickEvent(
+                    net.md_5.bungee.api.chat.ClickEvent.Action.RUN_COMMAND,
+                    "/worlds tp " + technicalName
+            );
+            message.setClickEvent(clickEvent);
+
+            // Adicione hover text
+            net.md_5.bungee.api.chat.HoverEvent hoverEvent = new net.md_5.bungee.api.chat.HoverEvent(
+                    net.md_5.bungee.api.chat.HoverEvent.Action.SHOW_TEXT,
+                    new net.md_5.bungee.api.chat.ComponentBuilder("Clique para teleportar para " + displayName + "\nClique com botão direito para detalhes")
+                            .color(net.md_5.bungee.api.ChatColor.AQUA)
+                            .create()
+            );
+            message.setHoverEvent(hoverEvent);
+
+            // Envie a mensagem para o jogador
+            player.spigot().sendMessage(message);
         }
     }
 

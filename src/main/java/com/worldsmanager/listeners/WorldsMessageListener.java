@@ -18,8 +18,8 @@ import org.bukkit.plugin.messaging.PluginMessageListener;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
-import java.io.File;
 import java.io.IOException;
+import java.io.File;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -45,29 +45,37 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(message));
             String subchannel = in.readUTF();
 
-            if (!subchannel.equals("Forward")) {
-                return;
+            // DEBUG para verificar subchannel
+            plugin.getLogger().info("[DEBUG] Subchannel recebido: " + subchannel);
+
+            if (subchannel.equals("Forward")) {
+                // Lê o servidor de destino (ignoramos, pois já chegou ao destino)
+                String server = in.readUTF();
+                plugin.getLogger().info("[DEBUG] Servidor destino: " + server);
+
+                // Lê o canal do plugin
+                String pluginChannel = in.readUTF();
+                plugin.getLogger().info("[DEBUG] Canal do plugin: " + pluginChannel);
+
+                if (!pluginChannel.equals(PLUGIN_CHANNEL)) {
+                    plugin.getLogger().warning("Canal de plugin inesperado: " + pluginChannel + " (esperado: " + PLUGIN_CHANNEL + ")");
+                    return;
+                }
+
+                // Lê o tamanho do array de dados
+                short dataLength = in.readShort();
+                byte[] data = new byte[dataLength];
+                in.readFully(data);
+
+                // Processa a mensagem
+                processPluginMessage(data);
+            } else {
+                plugin.getLogger().info("[DEBUG] Ignorando subchannel não processado: " + subchannel);
             }
-
-            // Lê o servidor de destino (ignoramos, pois já chegou ao destino)
-            in.readUTF();
-
-            // Lê o canal do plugin
-            String pluginChannel = in.readUTF();
-            if (!pluginChannel.equals(PLUGIN_CHANNEL)) {
-                return;
-            }
-
-            // Lê o tamanho do array de dados
-            short dataLength = in.readShort();
-            byte[] data = new byte[dataLength];
-            in.readFully(data);
-
-            // Processa a mensagem
-            processPluginMessage(data);
 
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Erro ao processar mensagem do BungeeCord", e);
+            e.printStackTrace(); // Adicionando stack trace para debug
         }
     }
 
@@ -80,6 +88,8 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
             String action = in.readUTF();
+
+            plugin.getLogger().info("[DEBUG] Ação recebida: " + action);
 
             switch (action) {
                 case "CreateWorld":
@@ -246,6 +256,8 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         UUID playerUUID = UUID.fromString(in.readUTF());
         String worldName = in.readUTF();
 
+        plugin.getLogger().info("[DEBUG] Recebido pedido de teleporte para jogador " + playerUUID + " para mundo " + worldName);
+
         // Programar para executar na próxima tick
         Bukkit.getScheduler().runTask(plugin, () -> {
             Player player = Bukkit.getPlayer(playerUUID);
@@ -259,46 +271,57 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
 
             // Tenta carregar o mundo se não estiver carregado
             if (world == null) {
+                plugin.getLogger().info("Tentando carregar mundo para teleporte: " + worldName);
+
                 // Tenta encontrar o mundo personalizado
                 CustomWorld customWorld = plugin.getWorldManager().getWorldByName(worldName);
 
                 if (customWorld != null) {
                     // Tenta carregar do caminho personalizado
+                    plugin.getLogger().info("Tentando carregar mundo a partir do caminho personalizado: " + customWorld.getWorldPath());
                     world = WorldCreationUtils.loadWorldFromPath(worldName, customWorld.getWorldPath());
                 }
 
                 // Se ainda for nulo, tenta carregar normalmente
                 if (world == null) {
+                    plugin.getLogger().info("Tentando carregar mundo normalmente: " + worldName);
                     world = WorldCreationUtils.loadWorld(worldName);
                 }
             }
 
             // Verifica se o mundo foi carregado com sucesso
             if (world == null) {
+                plugin.getLogger().severe("Falha ao carregar mundo para teleporte: " + worldName);
                 player.sendMessage(ChatColor.RED + plugin.getLanguageManager().getMessage("world-not-found"));
                 return;
             }
 
             // Teleporta o jogador
-            Location spawnLocation = world.getSpawnLocation();
-            player.teleport(spawnLocation);
-            player.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("teleported-to-world")
-                    .replace("%world%", worldName));
+            final World finalWorld = world;
+            plugin.getLogger().info("Teleportando jogador " + player.getName() + " para mundo " + worldName);
 
-            // Aplica modo de jogo se necessário
-            CustomWorld customWorld = plugin.getWorldManager().getWorldByName(worldName);
-            if (customWorld != null) {
-                if (customWorld.getOwnerUUID().equals(playerUUID)) {
-                    // Proprietário recebe o modo criativo
-                    player.setGameMode(GameMode.CREATIVE);
-                } else if (!player.hasPermission("worldsmanager.gamemode.bypass")) {
-                    // Outros jogadores recebem o modo definido nas configurações
-                    GameMode gameMode = customWorld.getSettings().getGameMode();
-                    if (gameMode != null) {
-                        player.setGameMode(gameMode);
+            // Pequeno delay para garantir que o mundo está totalmente carregado
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                Location spawnLocation = finalWorld.getSpawnLocation();
+                player.teleport(spawnLocation);
+                player.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("teleported-to-world")
+                        .replace("%world%", worldName));
+
+                // Aplica modo de jogo se necessário
+                CustomWorld customWorld = plugin.getWorldManager().getWorldByName(worldName);
+                if (customWorld != null) {
+                    if (customWorld.getOwnerUUID().equals(playerUUID)) {
+                        // Proprietário recebe o modo criativo
+                        player.setGameMode(GameMode.CREATIVE);
+                    } else if (!player.hasPermission("worldsmanager.gamemode.bypass")) {
+                        // Outros jogadores recebem o modo definido nas configurações
+                        GameMode gameMode = customWorld.getSettings().getGameMode();
+                        if (gameMode != null) {
+                            player.setGameMode(gameMode);
+                        }
                     }
                 }
-            }
+            }, 10L); // 0.5 segundo de delay
         });
     }
 

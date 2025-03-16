@@ -11,12 +11,14 @@ import com.worldsmanager.managers.DatabaseManager;
 import com.worldsmanager.managers.LanguageManager;
 import com.worldsmanager.managers.MessagingManager;
 import com.worldsmanager.managers.WorldManager;
+import com.worldsmanager.models.CustomWorld;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
 import java.util.logging.Level;
 
 /**
@@ -50,6 +52,11 @@ public class WorldsManager extends JavaPlugin {
         instance = this;
 
         try {
+            // Cria a pasta de configuração se não existir
+            if (!getDataFolder().exists()) {
+                getDataFolder().mkdirs();
+            }
+
             // Inicializa gerenciadores
             initializeManagers();
 
@@ -81,15 +88,39 @@ public class WorldsManager extends JavaPlugin {
             // Carrega todos os mundos do banco de dados
             loadWorlds();
 
+            // Configurar integração com Multiverse se disponível
+            setupMultiverseHook();
+
             getLogger().info("=======================");
             getLogger().info("WorldsManager Ativado!");
             getLogger().info("Versão: " + getDescription().getVersion());
             getLogger().info("Modo: " + (configManager.isCrossServerMode() ? "Cross-Server" : "Standalone"));
+            if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null) {
+                getLogger().info("Integração Multiverse: Ativa");
+            }
             getLogger().info("=======================");
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Erro ao inicializar o plugin WorldsManager", e);
             getLogger().severe("O plugin será desativado devido a erros na inicialização!");
             Bukkit.getPluginManager().disablePlugin(this);
+        }
+    }
+
+    private void setupMultiverseHook() {
+        if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null) {
+            getLogger().info("Multiverse-Core encontrado, integrando sistemas...");
+            // Verifica se há mundos que precisam ser registrados
+            for (CustomWorld world : worldManager.getAllWorlds()) {
+                if (Bukkit.getWorld(world.getWorldName()) != null &&
+                        !worldManager.isRegisteredInMultiverse(world.getWorldName())) {
+
+                    getLogger().info("Registrando mundo " + world.getWorldName() + " no Multiverse-Core");
+                    worldManager.registerWithMultiverse(world.getWorldName());
+                }
+            }
+            getLogger().info("Integração com Multiverse-Core concluída!");
+        } else {
+            getLogger().info("Multiverse-Core não encontrado, operando em modo independente");
         }
     }
 
@@ -158,26 +189,46 @@ public class WorldsManager extends JavaPlugin {
      * Configura a comunicação entre servidores
      */
     private void setupCrossServerCommunication() {
-        // Desregistra canais existentes
-        getServer().getMessenger().unregisterOutgoingPluginChannel(this);
-        getServer().getMessenger().unregisterIncomingPluginChannel(this);
+        // Desregistra canais existentes para evitar duplicação
+        try {
+            getServer().getMessenger().unregisterOutgoingPluginChannel(this);
+            getServer().getMessenger().unregisterIncomingPluginChannel(this);
+            getLogger().info("Canais de mensagens desregistrados com sucesso.");
+        } catch (Exception e) {
+            getLogger().warning("Erro ao desregistrar canais: " + e.getMessage());
+        }
 
         // Registra novos canais se o modo cross-server estiver ativado
         if (configManager.isCrossServerMode()) {
-            // Registra o canal BungeeCord
-            getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
-            // Cria uma nova instância do listener para evitar problemas com referências antigas
-            this.worldsMessageListener = new WorldsMessageListener(this);
-            getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", worldsMessageListener);
-
-            getLogger().info("Comunicação entre servidores configurada com sucesso!");
-
-            // NOVO: Verificação adicional para garantir registro
-            if (getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
-                getLogger().info("Canal BungeeCord está registrado com sucesso!");
-            } else {
-                getLogger().severe("ERRO: Canal BungeeCord NÃO está registrado! Tentando novamente...");
+            try {
+                // Registra o canal BungeeCord para saída
                 getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                getLogger().info("Canal BungeeCord registrado para saída.");
+
+                // Cria uma nova instância do listener para evitar problemas com referências antigas
+                this.worldsMessageListener = new WorldsMessageListener(this);
+                getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", worldsMessageListener);
+                getLogger().info("Canal BungeeCord registrado para entrada com listener: " + worldsMessageListener);
+
+                getLogger().info("Comunicação entre servidores configurada com sucesso!");
+
+                // Verificação adicional para garantir registro
+                if (getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+                    getLogger().info("Canal BungeeCord está registrado com sucesso para saída!");
+                } else {
+                    getLogger().severe("ERRO: Canal BungeeCord NÃO está registrado para saída! Tentando novamente...");
+                    getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                }
+
+                if (getServer().getMessenger().isIncomingChannelRegistered(this, "BungeeCord")) {
+                    getLogger().info("Canal BungeeCord está registrado com sucesso para entrada!");
+                } else {
+                    getLogger().severe("ERRO: Canal BungeeCord NÃO está registrado para entrada! Tentando novamente...");
+                    getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", worldsMessageListener);
+                }
+            } catch (Exception e) {
+                getLogger().severe("Erro crítico ao configurar canais de comunicação: " + e.getMessage());
+                e.printStackTrace();
             }
         } else {
             getLogger().info("Modo cross-server desativado, não registrando canais de comunicação.");

@@ -136,6 +136,15 @@ public class WorldManager implements Listener {
                 WorldSettings defaultSettings = configManager.getDefaultWorldSettings();
                 customWorld.setSettings(new WorldSettings(defaultSettings));
 
+                // Define o caminho personalizado
+                String playerName = "unknown";
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(ownerUUID);
+                if (offlinePlayer.getName() != null) {
+                    playerName = offlinePlayer.getName().toLowerCase();
+                }
+                String worldPath = "Mundos/" + playerName;
+                customWorld.setWorldPath(worldPath);
+
                 // Salva no banco de dados PRIMEIRO para garantir que o mundo exista no banco
                 databaseManager.saveWorld(customWorld);
                 plugin.getLogger().info("Mundo salvo no banco de dados: " + worldName);
@@ -207,13 +216,8 @@ public class WorldManager implements Listener {
                     // Cria o mundo localmente se não estiver em modo cross-server
                     createWorldLocally(worldName, customWorld);
 
-                    // Teleporta o jogador para o mundo recém-criado
-                    if (requester != null) {
-                        // Aguarda um momento para garantir que o mundo está carregado
-                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                            teleportPlayerToWorld(requester, customWorld);
-                        }, 20L); // 1 segundo de delay
-                    }
+                    // Registra no MultiVerse e finaliza a criação
+                    finalizeWorldCreation(customWorld, requester);
                 }
 
                 return customWorld;
@@ -231,6 +235,165 @@ public class WorldManager implements Listener {
             e.printStackTrace();
             return null;
         });
+    }
+
+    /**
+     * Finaliza o processo de criação do mundo com integração do MultiVerse
+     */
+    private void finalizeWorldCreation(CustomWorld customWorld, Player requester) {
+        // Registra no MultiVerse se disponível
+        if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                registerWithMultiverse(customWorld.getWorldName());
+            }, 60L); // 3 segundos após a criação para garantir que o mundo esteja carregado
+        }
+
+        // Notifica o proprietário se estiver online
+        if (requester != null && requester.isOnline()) {
+            requester.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("world-created-success"));
+
+            // Teleporta o jogador para o mundo recém-criado após um breve delay
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (requester.isOnline()) {
+                    requester.sendMessage(ChatColor.GREEN + "Teleportando para seu novo mundo: " + customWorld.getName());
+                    customWorld.teleportPlayer(requester);
+
+                    // Configura o jogador para modo criativo
+                    requester.setGameMode(GameMode.CREATIVE);
+
+                    // Mensagem de bem-vindo
+                    requester.sendMessage(ChatColor.GREEN + "Bem-vindo ao seu novo mundo! Você está no modo criativo.");
+                    requester.sendMessage(ChatColor.YELLOW + "Use /worlds para gerenciar seus mundos.");
+                }
+            }, 20L); // 1 segundo de delay
+        }
+    }
+
+    /**
+     * Método para integração com MultiVerse-Core
+     * Registra um mundo no MultiVerse após sua criação
+     *
+     * @param worldName Nome do mundo a ser registrado
+     * @return true se o registro foi bem-sucedido
+     */
+    public boolean registerWithMultiverse(String worldName) {
+        try {
+            // Verifica se o MultiVerse-Core está presente
+            if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") == null) {
+                plugin.getLogger().warning("MultiVerse-Core não encontrado. O mundo não será registrado no MultiVerse.");
+                return false;
+            }
+
+            // Executa o comando multiverse para importar o mundo
+            String command = "mv import " + worldName + " normal";
+            boolean success = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+
+            if (success) {
+                plugin.getLogger().info("Mundo " + worldName + " registrado com sucesso no MultiVerse-Core");
+
+                // Configura propriedades do mundo no MultiVerse (flat world)
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv modify set generator flat " + worldName);
+
+                // Configura permissões para o mundo (opcional)
+                // Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv modify set gamemode creative " + worldName);
+
+                return true;
+            } else {
+                plugin.getLogger().warning("Falha ao registrar mundo " + worldName + " no MultiVerse-Core");
+                return false;
+            }
+        } catch (Exception e) {
+            plugin.getLogger().severe("Erro ao integrar com MultiVerse-Core: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Verifica se um mundo está registrado no MultiVerse
+     *
+     * @param worldName Nome do mundo a verificar
+     * @return true se o mundo estiver registrado no MultiVerse
+     */
+    public boolean isRegisteredInMultiverse(String worldName) {
+        // Se o Multiverse não estiver instalado, retorna false
+        if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") == null) {
+            return false;
+        }
+
+        try {
+            // Tenta acessar a API do Multiverse
+            org.bukkit.plugin.Plugin mvPlugin = Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            Class<?> coreClass = mvPlugin.getClass();
+
+            // Tenta obter o método para verificar se o mundo existe no Multiverse
+            java.lang.reflect.Method mvWorldsMethod = coreClass.getMethod("getMVWorldManager");
+            Object worldManager = mvWorldsMethod.invoke(mvPlugin);
+
+            // Procura o método isMVWorld na classe do gerenciador de mundos
+            for (java.lang.reflect.Method method : worldManager.getClass().getMethods()) {
+                if (method.getName().equals("isMVWorld") && method.getParameterCount() == 1) {
+                    return (boolean) method.invoke(worldManager, worldName);
+                }
+            }
+
+            // Método alternativo - verifica se o mundo existe na configuração do Multiverse
+            File mvWorldsFile = new File(Bukkit.getWorldContainer().getParentFile(),
+                    "plugins/Multiverse-Core/worlds.yml");
+            if (mvWorldsFile.exists()) {
+                org.bukkit.configuration.file.YamlConfiguration config =
+                        org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(mvWorldsFile);
+                return config.contains("worlds." + worldName);
+            }
+
+            return false;
+        } catch (Exception e) {
+            plugin.getLogger().warning("Erro ao verificar mundo no Multiverse: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Método para obter a lista de mundos formatada para GUI
+     * Compatível com o formato do MultiVerse
+     *
+     * @param player Jogador para verificar permissões
+     * @return Lista de strings formatadas com informações dos mundos
+     */
+    public List<String> getFormattedWorldList(Player player) {
+        List<String> formattedList = new ArrayList<>();
+        Collection<CustomWorld> worlds = getAllWorlds();
+
+        // Verifica se o MultiVerse está presente
+        boolean hasMultiverse = Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null;
+
+        for (CustomWorld world : worlds) {
+            // Verifica se o jogador tem acesso
+            if (!world.canAccess(player) && !player.hasPermission("worldsmanager.admin")) {
+                continue;
+            }
+
+            // Formatação similar ao MultiVerse
+            String worldName = world.getName();
+            String ownerName = Bukkit.getOfflinePlayer(world.getOwnerUUID()).getName();
+            ownerName = (ownerName != null) ? ownerName : "Desconhecido";
+
+            StringBuilder worldInfo = new StringBuilder();
+            worldInfo.append("§a").append(worldName).append(" §7- ");
+
+            if (world.getOwnerUUID().equals(player.getUniqueId())) {
+                worldInfo.append("§6(Seu) ");
+            } else {
+                worldInfo.append("§7(Dono: ").append(ownerName).append(") ");
+            }
+
+            // Adiciona o nome técnico para uso em comandos
+            worldInfo.append("§8[").append(world.getWorldName()).append("]");
+
+            formattedList.add(worldInfo.toString());
+        }
+
+        return formattedList;
     }
 
     /**
@@ -310,6 +473,13 @@ public class WorldManager implements Listener {
                         }
                     }
 
+                    // Remove do Multiverse se estiver registrado
+                    if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null) {
+                        if (isRegisteredInMultiverse(worldName)) {
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv delete " + worldName);
+                        }
+                    }
+
                     // Exclui os arquivos do mundo
                     File worldFolder = new File(Bukkit.getWorldContainer(), worldName);
                     try {
@@ -364,7 +534,16 @@ public class WorldManager implements Listener {
 
         World world = Bukkit.getWorld(customWorld.getWorldName());
         if (world == null) {
-            world = WorldCreationUtils.loadWorld(customWorld.getWorldName());
+            // Tenta carregar do caminho personalizado
+            if (customWorld.getWorldPath() != null && !customWorld.getWorldPath().isEmpty()) {
+                world = WorldCreationUtils.loadWorldFromPath(customWorld.getWorldName(), customWorld.getWorldPath());
+            }
+
+            // Se ainda não conseguiu, tenta o método normal
+            if (world == null) {
+                world = WorldCreationUtils.loadWorld(customWorld.getWorldName());
+            }
+
             if (world != null) {
                 plugin.getLogger().info("Mundo carregado com sucesso: " + customWorld.getWorldName());
                 applyWorldSettings(customWorld);
@@ -393,17 +572,29 @@ public class WorldManager implements Listener {
 
             // Verifica se os canais estão registrados
             if (!plugin.isReadyForCrossServer()) {
-                plugin.getLogger().severe("Canais cross-server não estão corretamente registrados!");
-                player.sendMessage(ChatColor.RED + "Erro: canais cross-server não estão registrados corretamente!");
-                // Registra novamente os canais
+                plugin.getLogger().severe("Canais cross-server não estão corretamente registrados! Tentando registrar novamente...");
+
+                // Tenta registrar os canais novamente
                 plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
-                plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, "BungeeCord",
-                        new WorldsMessageListener(plugin));
-                return false;
+
+                if (plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, "BungeeCord")) {
+                    plugin.getLogger().info("Canal BungeeCord registrado com sucesso após retry!");
+                } else {
+                    player.sendMessage(ChatColor.RED + "Erro: falha ao registrar canais de comunicação! Contate um administrador.");
+                    return false;
+                }
             }
 
             // Usar o novo método para enviar jogador para o mundo em outro servidor
-            return messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
+            boolean success = messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
+
+            if (!success) {
+                player.sendMessage(ChatColor.RED + "Falha ao iniciar teleporte para o servidor de mundos. Tente novamente.");
+            } else {
+                player.sendMessage(ChatColor.YELLOW + "Teleportando para o servidor de mundos. Por favor, aguarde...");
+            }
+
+            return success;
         } else {
             // Carrega o mundo se não estiver carregado
             World world = loadWorld(customWorld);
@@ -766,17 +957,50 @@ public class WorldManager implements Listener {
             pendingTeleports.remove(playerUUID);
 
             // Delay para garantir que o jogador terminou de entrar no servidor
+            // Aumentamos o delay para dar mais tempo para inicializar tudo
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 CustomWorld world = getWorldByName(worldName);
 
                 if (world != null) {
-                    teleportPlayerToWorld(player, world);
-                    player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                    // Primeiro tentamos carregar o mundo se ele não estiver carregado
+                    if (!world.isLoaded()) {
+                        plugin.getLogger().info("Carregando mundo para teleporte pendente: " + worldName);
+                        loadWorld(world);
+
+                        // Aguardar mais um pouco para garantir que o mundo foi carregado
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                            if (player.isOnline()) {
+                                if (world.isLoaded()) {
+                                    teleportPlayerToWorld(player, world);
+                                    player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                                } else {
+                                    // Se ainda não carregou, tenta uma abordagem diferente com WorldCreationUtils
+                                    plugin.getLogger().info("Tentando método alternativo para carregar mundo: " + worldName);
+                                    try {
+                                        org.bukkit.World bukkitWorld = com.worldsmanager.utils.WorldCreationUtils.loadWorld(worldName);
+                                        if (bukkitWorld != null) {
+                                            player.teleport(bukkitWorld.getSpawnLocation());
+                                            player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                                        } else {
+                                            plugin.getLogger().warning("Mundo não pôde ser carregado: " + worldName);
+                                            player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não pôde ser carregado.");
+                                        }
+                                    } catch (Exception e) {
+                                        plugin.getLogger().severe("Erro ao carregar mundo: " + e.getMessage());
+                                        player.sendMessage(ChatColor.RED + "Erro ao carregar mundo: " + e.getMessage());
+                                    }
+                                }
+                            }
+                        }, 20L); // 1 segundo adicional para carregar
+                    } else {
+                        teleportPlayerToWorld(player, world);
+                        player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                    }
                 } else {
                     plugin.getLogger().warning("Mundo para teleporte pendente não encontrado: " + worldName);
                     player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não encontrado.");
                 }
-            }, 20L); // 1 segundo de delay
+            }, 40L); // Aumentado para 2 segundos (40 ticks)
         }
     }
 

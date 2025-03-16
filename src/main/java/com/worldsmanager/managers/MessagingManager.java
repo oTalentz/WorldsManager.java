@@ -168,49 +168,59 @@ public class MessagingManager {
                 plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
             }
 
-            // Primeiro envie a mensagem de teleporte para o servidor de destino
-            ByteArrayOutputStream msgBytes = new ByteArrayOutputStream();
-            DataOutputStream msgOut = new DataOutputStream(msgBytes);
+            // Adiciona o teleporte pendente ANTES do envio da mensagem
+            plugin.getWorldManager().addPendingTeleport(player.getUniqueId(), worldName);
+            plugin.getLogger().info("Teleporte pendente adicionado para " + player.getName() + " ao mundo " + worldName);
 
-            msgOut.writeUTF("TeleportToWorld");
-            msgOut.writeUTF(player.getUniqueId().toString());
-            msgOut.writeUTF(worldName);
+            // Cria uma mensagem para alertar o servidor de destino sobre o teleporte pendente
+            ByteArrayOutputStream alertBytes = new ByteArrayOutputStream();
+            DataOutputStream alertOut = new DataOutputStream(alertBytes);
 
-            byte[] msgData = msgBytes.toByteArray();
+            alertOut.writeUTF("Forward");
+            alertOut.writeUTF(plugin.getConfigManager().getWorldsServerName());
+            alertOut.writeUTF(PLUGIN_CHANNEL);
 
-            // Então, prepare a mensagem para o BungeeCord
-            ByteArrayOutputStream b = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(b);
+            ByteArrayOutputStream alertMsgBytes = new ByteArrayOutputStream();
+            DataOutputStream alertMsgOut = new DataOutputStream(alertMsgBytes);
 
-            // Envie a mensagem para o servidor de mundos com o canal do plugin
-            out.writeUTF("Forward");
-            out.writeUTF(plugin.getConfigManager().getWorldsServerName());
-            out.writeUTF(PLUGIN_CHANNEL);
-            out.writeShort(msgData.length);
-            out.write(msgData);
+            alertMsgOut.writeUTF("TeleportToWorld");
+            alertMsgOut.writeUTF(player.getUniqueId().toString());
+            alertMsgOut.writeUTF(worldName);
 
-            // Envie a mensagem usando o canal BungeeCord
-            player.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+            alertOut.writeShort(alertMsgBytes.toByteArray().length);
+            alertOut.write(alertMsgBytes.toByteArray());
 
-            plugin.getLogger().info("Enviada mensagem de preparação para teleporte");
+            player.sendPluginMessage(plugin, BUNGEE_CHANNEL, alertBytes.toByteArray());
+            plugin.getLogger().info("Mensagem de preparação para teleporte enviada");
 
-            // Após preparar o teleporte, conecte o jogador ao servidor de mundos
-            ByteArrayOutputStream connectBytes = new ByteArrayOutputStream();
-            DataOutputStream connectOut = new DataOutputStream(connectBytes);
+            // Pequeno delay antes de conectar ao servidor para garantir que a mensagem de preparação chegue primeiro
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                try {
+                    // Conecta o jogador ao servidor de mundos
+                    ByteArrayOutputStream connectBytes = new ByteArrayOutputStream();
+                    DataOutputStream connectOut = new DataOutputStream(connectBytes);
 
-            connectOut.writeUTF("Connect");
-            connectOut.writeUTF(plugin.getConfigManager().getWorldsServerName());
+                    connectOut.writeUTF("Connect");
+                    connectOut.writeUTF(plugin.getConfigManager().getWorldsServerName());
 
-            player.sendPluginMessage(plugin, BUNGEE_CHANNEL, connectBytes.toByteArray());
+                    if (player.isOnline()) {
+                        player.sendPluginMessage(plugin, BUNGEE_CHANNEL, connectBytes.toByteArray());
+                        plugin.getLogger().info("Jogador " + player.getName() + " enviado para o servidor " +
+                                plugin.getConfigManager().getWorldsServerName());
 
-            plugin.getLogger().info("Jogador " + player.getName() + " enviado para o servidor de mundos");
+                        // Controle de tentativa de teleporte
+                        UUID playerUUID = player.getUniqueId();
+                        teleportAttempts.put(playerUUID, 0);
 
-            // Controle de tentativa de teleporte
-            UUID playerUUID = player.getUniqueId();
-            teleportAttempts.put(playerUUID, 0);
-
-            // Inicie um loop para verificar se o jogador foi teleportado com sucesso
-            scheduleFollowUpMessage(player.getUniqueId(), worldName);
+                        // Inicie um loop para verificar se o jogador foi teleportado com sucesso
+                        scheduleFollowUpMessage(player.getUniqueId(), worldName);
+                    } else {
+                        plugin.getLogger().warning("Jogador desconectou antes do teleporte: " + player.getName());
+                    }
+                } catch (IOException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Erro ao conectar jogador ao servidor de mundos", e);
+                }
+            }, 10L); // 0.5 segundos de delay
 
             return true;
         } catch (IOException e) {
