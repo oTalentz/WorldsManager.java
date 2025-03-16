@@ -69,6 +69,12 @@ public class MessagingManager {
                 plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, BUNGEE_CHANNEL);
             }
 
+            // Verificar se há jogadores online para enviar a mensagem
+            if (Bukkit.getOnlinePlayers().isEmpty()) {
+                plugin.getLogger().severe("Não há jogadores online para enviar a mensagem!");
+                return false;
+            }
+
             ByteArrayOutputStream b = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(b);
 
@@ -87,6 +93,9 @@ public class MessagingManager {
             msgout.writeUTF(world.getOwnerUUID().toString());
             msgout.writeUTF(world.getIcon().name());
 
+            // Escrever o caminho personalizado do mundo
+            msgout.writeUTF(world.getWorldPath() != null ? world.getWorldPath() : "");
+
             // Escrever configurações do mundo
             WorldSettings settings = world.getSettings();
             writeWorldSettings(msgout, settings);
@@ -96,7 +105,27 @@ public class MessagingManager {
             out.write(msgbytes.toByteArray());
 
             // Enviar a mensagem
-            requester.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+            try {
+                requester.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+            } catch (Exception e) {
+                plugin.getLogger().severe("Erro ao enviar mensagem através do jogador: " + e.getMessage());
+
+                // Tenta usar outro jogador online se o primeiro falhar
+                Player alternativePlayer = null;
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!p.equals(requester)) {
+                        alternativePlayer = p;
+                        break;
+                    }
+                }
+
+                if (alternativePlayer != null) {
+                    plugin.getLogger().info("Tentando enviar mensagem através de jogador alternativo: " + alternativePlayer.getName());
+                    alternativePlayer.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+                } else {
+                    throw new IllegalStateException("Não há jogadores alternativos online para enviar a mensagem");
+                }
+            }
 
             // Notificar o jogador
             requester.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("world-creation-requested"));
@@ -109,6 +138,10 @@ public class MessagingManager {
             plugin.getLogger().log(Level.SEVERE, "Erro ao enviar mensagem de criação de mundo", e);
             // Notifica o jogador sobre a falha
             requester.sendMessage(ChatColor.RED + "Erro ao enviar mensagem para o servidor de mundos: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.SEVERE, "Erro inesperado ao enviar mensagem de criação de mundo", e);
+            requester.sendMessage(ChatColor.RED + "Erro inesperado: " + e.getMessage());
             return false;
         }
     }
