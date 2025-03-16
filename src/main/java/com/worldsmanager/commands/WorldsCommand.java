@@ -298,14 +298,16 @@ public class WorldsCommand implements CommandExecutor {
             );
             message.setClickEvent(clickEvent);
 
-            // Adicione hover text
-            net.md_5.bungee.api.chat.HoverEvent hoverEvent = new net.md_5.bungee.api.chat.HoverEvent(
+            // Adicione hover text (versão atualizada sem usar construtor deprecated)
+            net.md_5.bungee.api.chat.ComponentBuilder hoverBuilder = new net.md_5.bungee.api.chat.ComponentBuilder(
+                    "Clique para teleportar para " + displayName + "\nClique com botão direito para detalhes")
+                    .color(net.md_5.bungee.api.ChatColor.AQUA);
+
+            // Usar setHoverEvent com o novo método (Spigot API atualizada)
+            message.setHoverEvent(new net.md_5.bungee.api.chat.HoverEvent(
                     net.md_5.bungee.api.chat.HoverEvent.Action.SHOW_TEXT,
-                    new net.md_5.bungee.api.chat.ComponentBuilder("Clique para teleportar para " + displayName + "\nClique com botão direito para detalhes")
-                            .color(net.md_5.bungee.api.ChatColor.AQUA)
-                            .create()
-            );
-            message.setHoverEvent(hoverEvent);
+                    hoverBuilder.create()
+            ));
 
             // Envie a mensagem para o jogador
             player.spigot().sendMessage(message);

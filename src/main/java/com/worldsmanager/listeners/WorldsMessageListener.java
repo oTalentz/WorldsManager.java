@@ -126,7 +126,7 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         UUID ownerUUID = UUID.fromString(in.readUTF());
         Material icon = Material.valueOf(in.readUTF());
 
-        // Lê o caminho personalizado (adicionado para compatibilidade)
+        // Lê o caminho personalizado
         String worldPath = "";
         try {
             worldPath = in.readUTF();
@@ -145,15 +145,16 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
             playerName = offlinePlayer.getName().toLowerCase();
         }
 
-        // Se não foi enviado um caminho específico, define o caminho padrão
+        // Se não foi enviado um caminho específico, define o nome do jogador como caminho
         if (worldPath == null || worldPath.isEmpty()) {
-            worldPath = "Mundos/" + playerName;
+            worldPath = playerName;
         }
 
-        // Garante que o diretório existe
-        File worldDir = new File(Bukkit.getWorldContainer().getParentFile(), worldPath);
-        if (!worldDir.exists()) {
-            worldDir.mkdirs();
+        // Prepara a pasta do mundo - agora dentro da pasta do plugin
+        File worldsBaseFolder = WorldCreationUtils.getWorldsBaseFolder();
+        File playerDir = new File(worldsBaseFolder, worldPath);
+        if (!playerDir.exists()) {
+            playerDir.mkdirs();
         }
 
         // Verifica se o mundo já existe
@@ -171,7 +172,7 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
 
         // Registra nos logs
         plugin.getLogger().info("Criando mundo: " + worldName + " para jogador: " + playerName);
-        plugin.getLogger().info("Caminho de criação: " + worldPath);
+        plugin.getLogger().info("Caminho de criação: " + playerDir.getAbsolutePath());
 
         final String finalPlayerName = playerName;
         final String finalWorldPath = worldPath;
@@ -278,8 +279,12 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
 
                 if (customWorld != null) {
                     // Tenta carregar do caminho personalizado
-                    plugin.getLogger().info("Tentando carregar mundo a partir do caminho personalizado: " + customWorld.getWorldPath());
-                    world = WorldCreationUtils.loadWorldFromPath(worldName, customWorld.getWorldPath());
+                    String worldPath = customWorld.getWorldPath();
+                    plugin.getLogger().info("Tentando carregar mundo a partir do caminho personalizado: " + worldPath);
+
+                    if (worldPath != null && !worldPath.isEmpty()) {
+                        world = WorldCreationUtils.loadWorldFromPath(worldName, worldPath);
+                    }
                 }
 
                 // Se ainda for nulo, tenta carregar normalmente

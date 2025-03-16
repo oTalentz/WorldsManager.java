@@ -28,8 +28,8 @@ worlds:
   environment: NORMAL
   # Gerar estruturas (aldeias, templos, etc.)
   generate-structures: true
-  # Pasta onde os mundos são armazenados
-  worlds-folder: "Mundos"
+  # Pasta onde os mundos são armazenados (dentro da pasta do plugin)
+  worlds-folder: "mundos-jogadores"
   # Prefixo para os diretórios de mundos
   player-folder-prefix: true
 
@@ -81,7 +81,7 @@ cross-server:
   # Ativar modo multi-servidor
   enabled: true
   # Nome do servidor onde os mundos serão criados fisicamente
-  worlds-server: "Worlds-1"
+  worlds-server: "MineVoxel | Worlds"
   # Teleportar automaticamente o jogador ao criar um mundo
   auto-teleport: true
   # Tempo de espera entre envio e teleporte (em ticks)
@@ -209,32 +209,7 @@ messages:
   # Exibir mensagens de debug
   show-debug: true
 
-# Configurações de permissões
-permissions:
-  # Se verdadeiro, qualquer jogador pode criar mundos
-  allow-all-players-to-create: true
-  # Permissão necessária para criar mundos (ignorado se allow-all-players-to-create for true)
-  create: "worldsmanager.create"
-  # Permissão para teleporte gratuito
-  free-teleport: "worldsmanager.teleport.free"
-  # Permissão para número ilimitado de mundos
-  unlimited-worlds: "worldsmanager.create.unlimited"
-  # Permissão para ignorar o gamemode do mundo
-  gamemode-bypass: "worldsmanager.gamemode.bypass"
-
-# Configurações de compatibilidade
-compatibility:
-  # Suporte a Multiverse (desativa funções que possam conflitar)
-  multiverse-support: false
-  # Suporte a My Worlds (desativa funções que possam conflitar)
-  myworlds-support: false
-  # Lista de plugins com integração
-  integrations:
-    - GriefPrevention
-    - WorldEdit
-    - WorldGuard
-
-# Configurações de depuração
+# Configurações de debug
 debug:
   # Ativar modo de depuração
   enabled: true

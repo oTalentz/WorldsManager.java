@@ -12,6 +12,7 @@ import com.worldsmanager.managers.LanguageManager;
 import com.worldsmanager.managers.MessagingManager;
 import com.worldsmanager.managers.WorldManager;
 import com.worldsmanager.models.CustomWorld;
+import com.worldsmanager.utils.WorldCreationUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
@@ -57,6 +58,16 @@ public class WorldsManager extends JavaPlugin {
                 getDataFolder().mkdirs();
             }
 
+            // Cria a pasta para os mundos dos jogadores
+            File worldsFolder = new File(getDataFolder(), "mundos-jogadores");
+            if (!worldsFolder.exists()) {
+                worldsFolder.mkdirs();
+                getLogger().info("Pasta de mundos de jogadores criada: " + worldsFolder.getAbsolutePath());
+            }
+
+            // Inicializa a classe WorldCreationUtils para usar a pasta do plugin
+            WorldCreationUtils.init(this);
+
             // Inicializa gerenciadores
             initializeManagers();
 
@@ -95,6 +106,7 @@ public class WorldsManager extends JavaPlugin {
             getLogger().info("WorldsManager Ativado!");
             getLogger().info("Versão: " + getDescription().getVersion());
             getLogger().info("Modo: " + (configManager.isCrossServerMode() ? "Cross-Server" : "Standalone"));
+            getLogger().info("Pasta de mundos: " + worldsFolder.getAbsolutePath());
             if (Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null) {
                 getLogger().info("Integração Multiverse: Ativa");
             }

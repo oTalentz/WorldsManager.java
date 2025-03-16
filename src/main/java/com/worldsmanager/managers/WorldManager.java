@@ -40,10 +40,20 @@ public class WorldManager implements Listener {
         this.configManager = plugin.getConfigManager();
         this.messagingManager = plugin.getMessagingManager();
 
+        // Inicializa o WorldCreationUtils
+        WorldCreationUtils.init(plugin);
+
         // Verificação de inicialização dos gerenciadores
         if (this.messagingManager == null && configManager.isCrossServerMode()) {
             plugin.getLogger().severe("AVISO: MessagingManager não foi inicializado corretamente e o modo cross-server está ativado!");
             plugin.getLogger().severe("As operações cross-server não funcionarão adequadamente!");
+        }
+
+        // Cria o diretório de mundos dentro da pasta do plugin
+        File worldsFolder = new File(plugin.getDataFolder(), "mundos-jogadores");
+        if (!worldsFolder.exists()) {
+            worldsFolder.mkdirs();
+            plugin.getLogger().info("Diretório de mundos criado: " + worldsFolder.getAbsolutePath());
         }
 
         // Registrar listener para teleportes pendentes
@@ -106,6 +116,69 @@ public class WorldManager implements Listener {
     }
 
     /**
+     * Verifica se um mundo existe nos registros do plugin
+     *
+     * @param worldName Nome do mundo
+     * @return true se o mundo existe
+     */
+    public boolean worldExists(String worldName) {
+        return loadedWorlds.containsKey(worldName);
+    }
+
+    /**
+     * Verifica se um mundo existe no sistema de arquivos
+     *
+     * @param worldName Nome do mundo
+     * @return true se o mundo existe no sistema de arquivos
+     */
+    public boolean worldExistsOnDisk(String worldName) {
+        return WorldCreationUtils.worldExists(worldName);
+    }
+
+    /**
+     * Método para obter a lista de mundos formatada para GUI
+     * Compatível com o formato do MultiVerse
+     *
+     * @param player Jogador para verificar permissões
+     * @return Lista de strings formatadas com informações dos mundos
+     */
+    public List<String> getFormattedWorldList(Player player) {
+        List<String> formattedList = new ArrayList<>();
+        Collection<CustomWorld> worlds = getAllWorlds();
+
+        // Verifica se o MultiVerse está presente
+        boolean hasMultiverse = Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null;
+
+        for (CustomWorld world : worlds) {
+            // Verifica se o jogador tem acesso
+            if (!world.canAccess(player) && !player.hasPermission("worldsmanager.admin")) {
+                continue;
+            }
+
+            // Formatação similar ao MultiVerse
+            String worldName = world.getName();
+            String ownerName = Bukkit.getOfflinePlayer(world.getOwnerUUID()).getName();
+            ownerName = (ownerName != null) ? ownerName : "Desconhecido";
+
+            StringBuilder worldInfo = new StringBuilder();
+            worldInfo.append("§a").append(worldName).append(" §7- ");
+
+            if (world.getOwnerUUID().equals(player.getUniqueId())) {
+                worldInfo.append("§6(Seu) ");
+            } else {
+                worldInfo.append("§7(Dono: ").append(ownerName).append(") ");
+            }
+
+            // Adiciona o nome técnico para uso em comandos
+            worldInfo.append("§8[").append(world.getWorldName()).append("]");
+
+            formattedList.add(worldInfo.toString());
+        }
+
+        return formattedList;
+    }
+
+    /**
      * Cria um novo mundo
      *
      * @param name Nome de exibição do mundo
@@ -142,7 +215,8 @@ public class WorldManager implements Listener {
                 if (offlinePlayer.getName() != null) {
                     playerName = offlinePlayer.getName().toLowerCase();
                 }
-                String worldPath = "Mundos/" + playerName;
+                // Agora o caminho é relativo à pasta mundos-jogadores dentro do plugin
+                String worldPath = playerName;
                 customWorld.setWorldPath(worldPath);
 
                 // Salva no banco de dados PRIMEIRO para garantir que o mundo exista no banco
@@ -183,7 +257,7 @@ public class WorldManager implements Listener {
                             // Não criar localmente em caso de falha - apenas notificar o erro
                             return null;
                         } else {
-                            // SEMPRE teleportar o jogador para o servidor "Worlds-1" após a criação bem-sucedida
+                            // Teleportar o jogador para o servidor correto
                             plugin.getLogger().info("Teleportando jogador para o servidor de mundos: " +
                                     configManager.getWorldsServerName());
 
@@ -294,9 +368,6 @@ public class WorldManager implements Listener {
                 // Configura propriedades do mundo no MultiVerse (flat world)
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv modify set generator flat " + worldName);
 
-                // Configura permissões para o mundo (opcional)
-                // Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv modify set gamemode creative " + worldName);
-
                 return true;
             } else {
                 plugin.getLogger().warning("Falha ao registrar mundo " + worldName + " no MultiVerse-Core");
@@ -354,50 +425,7 @@ public class WorldManager implements Listener {
     }
 
     /**
-     * Método para obter a lista de mundos formatada para GUI
-     * Compatível com o formato do MultiVerse
-     *
-     * @param player Jogador para verificar permissões
-     * @return Lista de strings formatadas com informações dos mundos
-     */
-    public List<String> getFormattedWorldList(Player player) {
-        List<String> formattedList = new ArrayList<>();
-        Collection<CustomWorld> worlds = getAllWorlds();
-
-        // Verifica se o MultiVerse está presente
-        boolean hasMultiverse = Bukkit.getPluginManager().getPlugin("Multiverse-Core") != null;
-
-        for (CustomWorld world : worlds) {
-            // Verifica se o jogador tem acesso
-            if (!world.canAccess(player) && !player.hasPermission("worldsmanager.admin")) {
-                continue;
-            }
-
-            // Formatação similar ao MultiVerse
-            String worldName = world.getName();
-            String ownerName = Bukkit.getOfflinePlayer(world.getOwnerUUID()).getName();
-            ownerName = (ownerName != null) ? ownerName : "Desconhecido";
-
-            StringBuilder worldInfo = new StringBuilder();
-            worldInfo.append("§a").append(worldName).append(" §7- ");
-
-            if (world.getOwnerUUID().equals(player.getUniqueId())) {
-                worldInfo.append("§6(Seu) ");
-            } else {
-                worldInfo.append("§7(Dono: ").append(ownerName).append(") ");
-            }
-
-            // Adiciona o nome técnico para uso em comandos
-            worldInfo.append("§8[").append(world.getWorldName()).append("]");
-
-            formattedList.add(worldInfo.toString());
-        }
-
-        return formattedList;
-    }
-
-    /**
-     * Cria um mundo localmente usando Bukkit
+     * Cria um mundo localmente usando WorldCreationUtils
      *
      * @param worldName Nome do mundo
      * @param customWorld Objeto CustomWorld associado
@@ -406,10 +434,17 @@ public class WorldManager implements Listener {
     private void createWorldLocally(String worldName, CustomWorld customWorld) throws IllegalStateException {
         plugin.getLogger().info("Criando mundo localmente: " + worldName);
 
-        World world = WorldCreationUtils.createWorld(worldName,
+        // Obtém nome do jogador para o diretório
+        String playerFolder = customWorld.getWorldPath();
+
+        // Cria o mundo na pasta personalizada
+        World world = WorldCreationUtils.createWorldInPath(
+                worldName,
+                playerFolder,
                 configManager.getWorldType(),
                 configManager.getWorldEnvironment(),
-                configManager.isGenerateStructures());
+                configManager.isGenerateStructures()
+        );
 
         if (world == null) {
             plugin.getLogger().severe("Falha ao criar mundo localmente: " + worldName);
@@ -480,11 +515,23 @@ public class WorldManager implements Listener {
                         }
                     }
 
-                    // Exclui os arquivos do mundo
-                    File worldFolder = new File(Bukkit.getWorldContainer(), worldName);
+                    // Exclui os arquivos do mundo da pasta do plugin
+                    String playerFolder = customWorld.getWorldPath();
+                    File worldFolder;
+
+                    if (playerFolder != null && !playerFolder.isEmpty()) {
+                        worldFolder = WorldCreationUtils.getWorldDirectoryInPath(worldName, playerFolder);
+                    } else {
+                        worldFolder = WorldCreationUtils.getWorldDirectory(worldName);
+                    }
+
                     try {
-                        deleteFolder(worldFolder);
-                        plugin.getLogger().info("Arquivos do mundo excluídos: " + worldName);
+                        if (worldFolder.exists()) {
+                            deleteFolder(worldFolder);
+                            plugin.getLogger().info("Arquivos do mundo excluídos: " + worldFolder.getAbsolutePath());
+                        } else {
+                            plugin.getLogger().warning("Pasta do mundo não encontrada: " + worldFolder.getAbsolutePath());
+                        }
                     } catch (IOException e) {
                         plugin.getLogger().log(Level.SEVERE, "Falha ao excluir pasta do mundo", e);
                         return false;
@@ -534,9 +581,12 @@ public class WorldManager implements Listener {
 
         World world = Bukkit.getWorld(customWorld.getWorldName());
         if (world == null) {
-            // Tenta carregar do caminho personalizado
+            // Tenta carregar do caminho personalizado na pasta do plugin
             if (customWorld.getWorldPath() != null && !customWorld.getWorldPath().isEmpty()) {
-                world = WorldCreationUtils.loadWorldFromPath(customWorld.getWorldName(), customWorld.getWorldPath());
+                world = WorldCreationUtils.loadWorldFromPath(
+                        customWorld.getWorldName(),
+                        customWorld.getWorldPath()
+                );
             }
 
             // Se ainda não conseguiu, tenta o método normal
@@ -585,7 +635,7 @@ public class WorldManager implements Listener {
                 }
             }
 
-            // Usar o novo método para enviar jogador para o mundo em outro servidor
+            // Usar o método para enviar jogador para o mundo em outro servidor
             boolean success = messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
 
             if (!success) {
@@ -731,8 +781,6 @@ public class WorldManager implements Listener {
         }
 
         // Aplica o modo de jogo padrão para o mundo
-        // Observe que isso só afeta novos jogadores que entram no mundo
-        // Jogadores existentes mantêm seu modo de jogo
         if (settings.getGameMode() != null) {
             for (Player player : world.getPlayers()) {
                 if (!player.hasPermission("worldsmanager.gamemode.bypass")) {
@@ -746,10 +794,6 @@ public class WorldManager implements Listener {
 
     /**
      * Atualiza as configurações de um mundo
-     *
-     * @param customWorld Mundo a ser atualizado
-     * @param settings Novas configurações
-     * @param requester Jogador que solicitou a atualização (pode ser null)
      */
     public void updateWorldSettings(CustomWorld customWorld, WorldSettings settings, Player requester) {
         // Atualiza as configurações no objeto
@@ -792,9 +836,6 @@ public class WorldManager implements Listener {
 
     /**
      * Obtém todos os mundos de um jogador
-     *
-     * @param playerUUID UUID do jogador
-     * @return Lista de mundos do jogador
      */
     public List<CustomWorld> getPlayerWorlds(UUID playerUUID) {
         return loadedWorlds.values().stream()
@@ -804,9 +845,6 @@ public class WorldManager implements Listener {
 
     /**
      * Obtém todos os mundos que um jogador tem acesso
-     *
-     * @param playerUUID UUID do jogador
-     * @return Lista de mundos acessíveis
      */
     public List<CustomWorld> getAccessibleWorlds(UUID playerUUID) {
         return loadedWorlds.values().stream()
@@ -817,9 +855,6 @@ public class WorldManager implements Listener {
 
     /**
      * Obtém um mundo pelo nome
-     *
-     * @param worldName Nome do mundo
-     * @return CustomWorld ou null se não encontrado
      */
     public CustomWorld getWorldByName(String worldName) {
         return loadedWorlds.get(worldName);
@@ -827,8 +862,6 @@ public class WorldManager implements Listener {
 
     /**
      * Obtém todos os mundos carregados
-     *
-     * @return Coleção imutável de mundos
      */
     public Collection<CustomWorld> getAllWorlds() {
         return Collections.unmodifiableCollection(loadedWorlds.values());
@@ -846,10 +879,6 @@ public class WorldManager implements Listener {
 
     /**
      * Método auxiliar para descarregar um mundo
-     *
-     * @param worldName Nome do mundo
-     * @param save Salvar o mundo antes de descarregar
-     * @return true se o mundo foi descarregado com sucesso
      */
     private boolean unloadWorld(String worldName, boolean save) {
         World world = Bukkit.getWorld(worldName);
@@ -877,9 +906,6 @@ public class WorldManager implements Listener {
 
     /**
      * Método auxiliar para excluir uma pasta recursivamente
-     *
-     * @param folder Pasta a ser excluída
-     * @throws IOException Se ocorrer um erro de IO
      */
     private void deleteFolder(File folder) throws IOException {
         if (!folder.exists()) {
@@ -909,31 +935,7 @@ public class WorldManager implements Listener {
     }
 
     /**
-     * Verifica se um mundo existe nos registros do plugin
-     *
-     * @param worldName Nome do mundo
-     * @return true se o mundo existe
-     */
-    public boolean worldExists(String worldName) {
-        return loadedWorlds.containsKey(worldName);
-    }
-
-    /**
-     * Verifica se um mundo existe no sistema de arquivos
-     *
-     * @param worldName Nome do mundo
-     * @return true se o mundo existe no sistema de arquivos
-     */
-    public boolean worldExistsOnDisk(String worldName) {
-        return WorldCreationUtils.worldExists(worldName);
-    }
-
-    /**
      * Adiciona um teleporte pendente para um jogador
-     * Usado pelo sistema cross-server para teleportar jogadores após entrarem no servidor
-     *
-     * @param playerUUID UUID do jogador
-     * @param worldName Nome do mundo
      */
     public void addPendingTeleport(UUID playerUUID, String worldName) {
         pendingTeleports.put(playerUUID, worldName);
@@ -942,9 +944,6 @@ public class WorldManager implements Listener {
 
     /**
      * Verifica e processa teleportes pendentes para um jogador
-     * Chamado quando um jogador entra no servidor
-     *
-     * @param player Jogador que entrou
      */
     public void checkPendingTeleports(Player player) {
         UUID playerUUID = player.getUniqueId();
@@ -957,7 +956,6 @@ public class WorldManager implements Listener {
             pendingTeleports.remove(playerUUID);
 
             // Delay para garantir que o jogador terminou de entrar no servidor
-            // Aumentamos o delay para dar mais tempo para inicializar tudo
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 CustomWorld world = getWorldByName(worldName);
 
@@ -966,47 +964,25 @@ public class WorldManager implements Listener {
                     if (!world.isLoaded()) {
                         plugin.getLogger().info("Carregando mundo para teleporte pendente: " + worldName);
                         loadWorld(world);
+                    }
 
-                        // Aguardar mais um pouco para garantir que o mundo foi carregado
-                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                            if (player.isOnline()) {
-                                if (world.isLoaded()) {
-                                    teleportPlayerToWorld(player, world);
-                                    player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
-                                } else {
-                                    // Se ainda não carregou, tenta uma abordagem diferente com WorldCreationUtils
-                                    plugin.getLogger().info("Tentando método alternativo para carregar mundo: " + worldName);
-                                    try {
-                                        org.bukkit.World bukkitWorld = com.worldsmanager.utils.WorldCreationUtils.loadWorld(worldName);
-                                        if (bukkitWorld != null) {
-                                            player.teleport(bukkitWorld.getSpawnLocation());
-                                            player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
-                                        } else {
-                                            plugin.getLogger().warning("Mundo não pôde ser carregado: " + worldName);
-                                            player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não pôde ser carregado.");
-                                        }
-                                    } catch (Exception e) {
-                                        plugin.getLogger().severe("Erro ao carregar mundo: " + e.getMessage());
-                                        player.sendMessage(ChatColor.RED + "Erro ao carregar mundo: " + e.getMessage());
-                                    }
-                                }
-                            }
-                        }, 20L); // 1 segundo adicional para carregar
-                    } else {
+                    if (world.isLoaded()) {
                         teleportPlayerToWorld(player, world);
                         player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                    } else {
+                        plugin.getLogger().warning("Mundo não pôde ser carregado: " + worldName);
+                        player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não pôde ser carregado.");
                     }
                 } else {
                     plugin.getLogger().warning("Mundo para teleporte pendente não encontrado: " + worldName);
                     player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não encontrado.");
                 }
-            }, 40L); // Aumentado para 2 segundos (40 ticks)
+            }, 40L); // 2 segundos de delay
         }
     }
 
     /**
      * Registra um listener para processar teleportes pendentes
-     * Deve ser chamado durante a inicialização do plugin
      */
     public void registerPendingTeleportListener() {
         Bukkit.getPluginManager().registerEvents(new Listener() {
@@ -1025,9 +1001,6 @@ public class WorldManager implements Listener {
 
     /**
      * Verifica se o plugin está pronto para comunicação cross-server
-     * Este é um método novo para verificar se tudo está corretamente configurado
-     *
-     * @return true se o plugin está pronto para cross-server
      */
     public boolean isReadyForCrossServer() {
         if (!configManager.isCrossServerMode()) {
