@@ -73,17 +73,17 @@ public class MenuClickListener implements Listener {
         }
 
         // Verifica se é um inventário válido do plugin
-        if (title.equals(worldsGUI.getMainGUITitle())) {
+        if (title.equals(worldsGUI.getMainGUITitle()) || title.contains("Seus Mundos")) {
             event.setCancelled(true);
             handleMainGUIClick(player, slot);
             return;
         }
 
-        // Verifica se é o menu de criação de mundo
+        // Verifica se é o menu de criação de mundo - verificação mais flexível
         String createTitle = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getCreateGUITitle());
 
-        if (title.equals(createTitle)) {
+        if (title.equals(createTitle) || title.contains("Criar Novo Mundo")) {
             event.setCancelled(true);
             handleWorldCreateGUIClick(player, slot, event.getClickedInventory());
             return;
@@ -100,7 +100,7 @@ public class MenuClickListener implements Listener {
         String confirmTitle = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getConfirmGUITitle());
 
-        if (title.equals(confirmTitle)) {
+        if (title.equals(confirmTitle) || title.contains("Confirmar Exclusão")) {
             event.setCancelled(true);
             handleDeletionConfirmation(player, slot);
             return;
@@ -127,14 +127,14 @@ public class MenuClickListener implements Listener {
         String confirmTitle = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getConfirmGUITitle());
 
-        if (title.equals(confirmTitle)) {
+        if (title.equals(confirmTitle) || title.contains("Confirmar Exclusão")) {
             if (confirmingDeletion.containsKey(playerUUID) && confirmingDeletion.get(playerUUID)) {
                 confirmingDeletion.remove(playerUUID);
                 player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-deletion-cancelled"));
             }
         }
         // Limpa dados se o jogador está fechando um menu do plugin
-        else if (title.equals(worldsGUI.getMainGUITitle()) ||
+        else if (title.equals(worldsGUI.getMainGUITitle()) || title.contains("Seus Mundos") ||
                 (title.startsWith(ChatColor.GREEN.toString()) && title.contains(" - " + ChatColor.GRAY + "Gerenciamento"))) {
             managingWorld.remove(playerUUID);
         }
@@ -230,15 +230,18 @@ public class MenuClickListener implements Listener {
         if (clickedItem.getType() == Material.BARRIER) {
             player.closeInventory();
             player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-creation-cancelled"));
+
+            // Garante que o estado do jogador é resetado
+            WorldCreateGUI createGUI = plugin.getWorldsCommand().getWorldCreateGUI();
+            if (createGUI != null) {
+                createGUI.resetPlayerState(player);
+            }
+
             return;
         }
 
-        // Se clicou em um material válido para ícone
-        Material selectedIcon = clickedItem.getType();
-        if (plugin.getConfigManager().isValidIconMaterial(selectedIcon)) {
-            player.closeInventory();
-            // Deixamos o WorldCreateGUI lidar com isso
-        }
+        // Deixe o WorldCreateGUI lidar com seleção de ícones
+        // Este método não fará mais validações próprias de ícone
     }
 
     /**

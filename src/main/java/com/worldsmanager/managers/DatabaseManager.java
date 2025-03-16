@@ -58,8 +58,26 @@ public class DatabaseManager {
                 return;
             }
 
-            String url = "jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false";
+            // Log para debug
+            plugin.getLogger().info("Tentando conectar ao banco de dados MySQL: " + host + ":" + port + "/" + database);
+            plugin.getLogger().info("Usuário: " + username);
+
+            String url = "jdbc:mysql://" + host + ":" + port + "/" + database +
+                    "?useSSL=false&autoReconnect=true&useUnicode=true&characterEncoding=UTF-8";
+
+            // Aumentar os timeouts para dar mais tempo à conexão
+            url += "&connectTimeout=10000&socketTimeout=60000";
+
+            // Try to connect
             connection = DriverManager.getConnection(url, username, password);
+
+            // Test connection
+            try (Statement stmt = connection.createStatement()) {
+                ResultSet rs = stmt.executeQuery("SELECT 1");
+                if (rs.next()) {
+                    plugin.getLogger().info("Conexão de teste ao MySQL bem-sucedida!");
+                }
+            }
 
             // Cria tabelas se não existirem
             createTables();
@@ -67,6 +85,59 @@ public class DatabaseManager {
             plugin.getLogger().info("Conectado ao banco de dados MySQL com sucesso.");
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Falha ao conectar ao banco de dados", e);
+            plugin.getLogger().severe("URL: jdbc:mysql://" + host + ":" + port + "/" + database);
+            plugin.getLogger().severe("Usuário: " + username);
+            plugin.getLogger().severe("Detalhes do erro: " + e.getMessage());
+
+            // Try to reconnect after a delay if needed
+            Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, this::reconnect, 200L); // 10 seconds
+        }
+    }
+
+    /**
+     * Tentativa de reconexão ao banco de dados
+     */
+    private void reconnect() {
+        plugin.getLogger().info("Tentando reconectar ao banco de dados...");
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+            }
+
+            String url = "jdbc:mysql://" + host + ":" + port + "/" + database +
+                    "?useSSL=false&autoReconnect=true&useUnicode=true&characterEncoding=UTF-8" +
+                    "&connectTimeout=10000&socketTimeout=60000";
+
+            // Tenta reconectar com usuário e senha do config
+            connection = DriverManager.getConnection(url, username, password);
+
+            // Test connection
+            try (Statement stmt = connection.createStatement()) {
+                ResultSet rs = stmt.executeQuery("SELECT 1");
+                if (rs.next()) {
+                    plugin.getLogger().info("Reconexão ao MySQL bem-sucedida!");
+                    createTables();
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Falha na tentativa de reconexão", e);
+            plugin.getLogger().severe("Usuário: " + username);
+            plugin.getLogger().severe("Detalhes do erro: " + e.getMessage());
+
+            // Se falhar após várias tentativas, notifique no console
+            plugin.getLogger().severe("Não foi possível conectar ao banco de dados após múltiplas tentativas.");
+            plugin.getLogger().severe("Verifique as credenciais no config.yml e se o servidor MySQL está acessível.");
+        }
+    }
+
+    /**
+     * Verifica se a conexão está ativa
+     */
+    public boolean isConnected() {
+        try {
+            return connection != null && !connection.isClosed() && connection.isValid(1);
+        } catch (SQLException e) {
+            return false;
         }
     }
 
@@ -165,6 +236,16 @@ public class DatabaseManager {
         }
 
         try {
+            // Verifica se a conexão está ativa
+            if (!isConnected()) {
+                plugin.getLogger().warning("Conexão com banco de dados perdida. Tentando reconectar...");
+                connect();
+                if (!isConnected()) {
+                    plugin.getLogger().severe("Não foi possível reconectar ao banco de dados. Operação cancelada.");
+                    return;
+                }
+            }
+
             connection.setAutoCommit(false);
 
             // Salva ou atualiza mundo
@@ -355,6 +436,16 @@ public class DatabaseManager {
         }
 
         try {
+            // Verifica se a conexão está ativa
+            if (!isConnected()) {
+                plugin.getLogger().warning("Conexão com banco de dados perdida. Tentando reconectar...");
+                connect();
+                if (!isConnected()) {
+                    plugin.getLogger().severe("Não foi possível reconectar ao banco de dados. Operação cancelada.");
+                    return;
+                }
+            }
+
             String sql = "DELETE FROM " + tablePrefix + "worlds WHERE id = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setInt(1, world.getId());
@@ -378,6 +469,16 @@ public class DatabaseManager {
         }
 
         try {
+            // Verifica se a conexão está ativa
+            if (!isConnected()) {
+                plugin.getLogger().warning("Conexão com banco de dados perdida. Tentando reconectar...");
+                connect();
+                if (!isConnected()) {
+                    plugin.getLogger().severe("Não foi possível reconectar ao banco de dados. Operação cancelada.");
+                    return worlds;
+                }
+            }
+
             String sql = "SELECT w.id, w.name, w.owner_uuid, w.world_name, w.icon, "
                     + "s.game_mode, s.pvp_enabled, s.mob_spawning, s.redstone_enabled, s.physics_enabled, "
                     + "s.weather_enabled, s.fluid_flow, s.time_cycle, s.fixed_time, s.tick_speed "
@@ -392,14 +493,31 @@ public class DatabaseManager {
                     String name = resultSet.getString("name");
                     UUID ownerUUID = UUID.fromString(resultSet.getString("owner_uuid"));
                     String worldName = resultSet.getString("world_name");
-                    Material icon = Material.valueOf(resultSet.getString("icon"));
+
+                    // Handle potentially invalid material names
+                    Material icon;
+                    try {
+                        icon = Material.valueOf(resultSet.getString("icon"));
+                    } catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("Material inválido para o mundo " + name + ": " +
+                                resultSet.getString("icon") + ". Usando GRASS_BLOCK como padrão.");
+                        icon = Material.GRASS_BLOCK;
+                    }
 
                     CustomWorld world = new CustomWorld(id, name, ownerUUID, worldName, icon);
 
                     // Carrega configurações se disponíveis
                     if (resultSet.getString("game_mode") != null) {
                         WorldSettings settings = new WorldSettings();
-                        settings.setGameMode(GameMode.valueOf(resultSet.getString("game_mode")));
+
+                        try {
+                            settings.setGameMode(GameMode.valueOf(resultSet.getString("game_mode")));
+                        } catch (IllegalArgumentException e) {
+                            plugin.getLogger().warning("GameMode inválido para o mundo " + name + ": " +
+                                    resultSet.getString("game_mode") + ". Usando SURVIVAL como padrão.");
+                            settings.setGameMode(GameMode.SURVIVAL);
+                        }
+
                         settings.setPvpEnabled(resultSet.getBoolean("pvp_enabled"));
                         settings.setMobSpawning(resultSet.getBoolean("mob_spawning"));
                         settings.setRedstoneEnabled(resultSet.getBoolean("redstone_enabled"));

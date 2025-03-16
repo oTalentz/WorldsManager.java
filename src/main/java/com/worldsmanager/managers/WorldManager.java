@@ -7,6 +7,10 @@ import com.worldsmanager.models.WorldSettings;
 import com.worldsmanager.utils.WorldCreationUtils;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +30,9 @@ public class WorldManager {
     private final ConfigManager configManager;
     private final MessagingManager messagingManager;
 
+    // Sistema de teleportes pendentes
+    private final Map<UUID, String> pendingTeleports = new HashMap<>();
+
     public WorldManager(WorldsManager plugin) {
         this.plugin = plugin;
         this.loadedWorlds = new HashMap<>();
@@ -38,6 +45,9 @@ public class WorldManager {
             plugin.getLogger().severe("AVISO: MessagingManager não foi inicializado corretamente e o modo cross-server está ativado!");
             plugin.getLogger().severe("As operações cross-server não funcionarão adequadamente!");
         }
+
+        // Registrar listener para teleportes pendentes
+        registerPendingTeleportListener();
     }
 
     /**
@@ -157,16 +167,14 @@ public class WorldManager {
                             // Tenta criar localmente como fallback em caso de falha
                             createWorldLocally(worldName, customWorld);
                         } else {
-                            // Teleporta o jogador para o servidor de mundos se configurado
-                            if (configManager.isAutoTeleport()) {
-                                plugin.getLogger().info("Tentando teleportar jogador para o servidor de mundos");
-                                boolean teleportSent = messagingManager.sendTeleportToWorldMessage(requester, worldName);
+                            // CORREÇÃO: Sempre teleportar o jogador independente da configuração
+                            plugin.getLogger().info("Teleportando jogador para o servidor de mundos: " + configManager.getWorldsServerName());
+                            boolean teleportSent = messagingManager.sendPlayerToServer(requester, configManager.getWorldsServerName());
 
-                                if (!teleportSent) {
-                                    plugin.getLogger().severe("Falha ao enviar mensagem de teleporte cross-server!");
-                                    if (requester != null) {
-                                        requester.sendMessage(ChatColor.RED + "Falha ao teleportar para o servidor de mundos. Tente teleportar manualmente.");
-                                    }
+                            if (!teleportSent) {
+                                plugin.getLogger().severe("Falha ao enviar jogador para o servidor de mundos!");
+                                if (requester != null) {
+                                    requester.sendMessage(ChatColor.RED + "Falha ao teleportar para o servidor de mundos. Tente teleportar manualmente usando /server " + configManager.getWorldsServerName());
                                 }
                             }
                         }
@@ -181,6 +189,14 @@ public class WorldManager {
                 } else {
                     // Cria o mundo localmente
                     createWorldLocally(worldName, customWorld);
+
+                    // Teleporta o jogador para o mundo recém-criado
+                    if (requester != null) {
+                        // Aguarda um momento para garantir que o mundo está carregado
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                            teleportPlayerToWorld(requester, customWorld);
+                        }, 20L); // 1 segundo de delay
+                    }
                 }
 
                 return customWorld;
@@ -369,8 +385,8 @@ public class WorldManager {
                 return false;
             }
 
-            // Envia mensagem para teleportar o jogador para o mundo no servidor de mundos
-            return messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
+            // Usar o novo método para enviar jogador para o mundo em outro servidor
+            return messagingManager.sendPlayerToWorld(player, customWorld.getWorldName());
         } else {
             // Carrega o mundo se não estiver carregado
             World world = loadWorld(customWorld);
@@ -702,5 +718,96 @@ public class WorldManager {
      */
     public boolean worldExistsOnDisk(String worldName) {
         return WorldCreationUtils.worldExists(worldName);
+    }
+
+    /**
+     * Adiciona um teleporte pendente para um jogador
+     * Usado pelo sistema cross-server para teleportar jogadores após entrarem no servidor
+     *
+     * @param playerUUID UUID do jogador
+     * @param worldName Nome do mundo
+     */
+    public void addPendingTeleport(UUID playerUUID, String worldName) {
+        pendingTeleports.put(playerUUID, worldName);
+        plugin.getLogger().info("Teleporte pendente adicionado para " + playerUUID + " para o mundo " + worldName);
+    }
+
+    /**
+     * Verifica e processa teleportes pendentes para um jogador
+     * Chamado quando um jogador entra no servidor
+     *
+     * @param player Jogador que entrou
+     */
+    public void checkPendingTeleports(Player player) {
+        UUID playerUUID = player.getUniqueId();
+
+        if (pendingTeleports.containsKey(playerUUID)) {
+            String worldName = pendingTeleports.get(playerUUID);
+            plugin.getLogger().info("Processando teleporte pendente para " + player.getName() + " para o mundo " + worldName);
+
+            // Remove do mapa de pendentes antes de teleportar
+            pendingTeleports.remove(playerUUID);
+
+            // Delay para garantir que o jogador terminou de entrar no servidor
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                CustomWorld world = getWorldByName(worldName);
+
+                if (world != null) {
+                    teleportPlayerToWorld(player, world);
+                    player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
+                } else {
+                    plugin.getLogger().warning("Mundo para teleporte pendente não encontrado: " + worldName);
+                    player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não encontrado.");
+                }
+            }, 20L); // 1 segundo de delay
+        }
+    }
+
+    /**
+     * Registra um listener para processar teleportes pendentes
+     * Deve ser chamado durante a inicialização do plugin
+     */
+    public void registerPendingTeleportListener() {
+        Bukkit.getPluginManager().registerEvents(new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            public void onPlayerJoin(PlayerJoinEvent event) {
+                // Processa teleportes pendentes quando o jogador entrar
+                Player player = event.getPlayer();
+
+                // Pequeno delay para garantir que o jogador terminou de entrar
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    checkPendingTeleports(player);
+                }, 10L);
+            }
+        }, plugin);
+    }
+
+    /**
+     * Verifica se o plugin está pronto para comunicação cross-server
+     * Este é um método novo para verificar se tudo está corretamente configurado
+     *
+     * @return true se o plugin está pronto para cross-server
+     */
+    public boolean isReadyForCrossServer() {
+        if (!configManager.isCrossServerMode()) {
+            return false;
+        }
+
+        if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, "BungeeCord")) {
+            plugin.getLogger().severe("Canal BungeeCord não está registrado para saída!");
+            return false;
+        }
+
+        if (!plugin.getServer().getMessenger().isIncomingChannelRegistered(plugin, "BungeeCord")) {
+            plugin.getLogger().severe("Canal BungeeCord não está registrado para entrada!");
+            return false;
+        }
+
+        if (messagingManager == null) {
+            plugin.getLogger().severe("MessagingManager não está inicializado!");
+            return false;
+        }
+
+        return true;
     }
 }

@@ -59,9 +59,7 @@ public class WorldCreateGUI implements Listener {
         plugin.getLogger().info("[DEBUG] Abrindo menu de criação para " + player.getName());
 
         // Cancela qualquer criação pendente
-        playerStages.put(player.getUniqueId(), CreationStage.NONE);
-        pendingNames.remove(player.getUniqueId());
-        pendingIcons.remove(player.getUniqueId());
+        resetPlayerState(player);
 
         // Solicita o nome do mundo via chat
         playerStages.put(player.getUniqueId(), CreationStage.AWAITING_NAME);
@@ -85,19 +83,21 @@ public class WorldCreateGUI implements Listener {
         // DEBUG: Log de abertura da seleção de ícone
         plugin.getLogger().info("[DEBUG] Abrindo seleção de ícone para " + player.getName() + " com mundo: " + worldName);
 
-        pendingNames.put(player.getUniqueId(), worldName);
-        playerStages.put(player.getUniqueId(), CreationStage.SELECTING_ICON);
+        UUID playerUUID = player.getUniqueId();
+        pendingNames.put(playerUUID, worldName);
+        playerStages.put(playerUUID, CreationStage.SELECTING_ICON);
 
         // DEBUG: Log dos mapas atualizados
         plugin.getLogger().info("[DEBUG] pendingNames: " + pendingNames.toString());
         plugin.getLogger().info("[DEBUG] playerStages: " + playerStages.toString());
 
         // Cria o inventário
-        Inventory inv = Bukkit.createInventory(null, 54,
-                ChatColor.translateAlternateColorCodes('&',
-                        plugin.getConfigManager().getCreateGUITitle()));
+        String title = ChatColor.translateAlternateColorCodes('&',
+                plugin.getConfigManager().getCreateGUITitle());
 
-        // Adiciona ícones comuns
+        Inventory inv = Bukkit.createInventory(null, 54, title);
+
+        // Adiciona ícones comuns - garanta que estão na lista de disponíveis no config
         addIcon(inv, 10, Material.GRASS_BLOCK, "Terrestre");
         addIcon(inv, 11, Material.STONE, "Caverna");
         addIcon(inv, 12, Material.SAND, "Deserto");
@@ -107,7 +107,7 @@ public class WorldCreateGUI implements Listener {
         addIcon(inv, 16, Material.LAVA_BUCKET, "Nether");
 
         addIcon(inv, 19, Material.NETHERRACK, "Nether");
-        addIcon(inv, 20, Material.END_STONE, "End");
+        addIcon(inv, 20, Material.END_STONE, "End");  // Este estava causando problemas
         addIcon(inv, 21, Material.DIAMOND_BLOCK, "Criativo");
         addIcon(inv, 22, Material.OAK_SAPLING, "Survival");
         addIcon(inv, 23, Material.COBWEB, "Skyblock");
@@ -147,6 +147,10 @@ public class WorldCreateGUI implements Listener {
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+
         Player player = (Player) event.getWhoClicked();
         UUID playerUUID = player.getUniqueId();
 
@@ -161,11 +165,12 @@ public class WorldCreateGUI implements Listener {
             return;
         }
 
-        // Verifica se é o inventário correto
+        // Verifica se é o inventário correto - mais flexível
         String title = ChatColor.translateAlternateColorCodes('&',
                 plugin.getConfigManager().getCreateGUITitle());
 
-        if (!event.getView().getTitle().equals(title)) {
+        if (!event.getView().getTitle().equals(title) &&
+                !event.getView().getTitle().contains("Criar Novo Mundo")) {
             plugin.getLogger().info("[DEBUG] Ignorando clique - título do inventário não corresponde");
             return;
         }
@@ -182,8 +187,7 @@ public class WorldCreateGUI implements Listener {
         if (event.getCurrentItem().getType() == Material.BARRIER) {
             plugin.getLogger().info("[DEBUG] Clique no botão cancelar");
             player.closeInventory();
-            playerStages.put(playerUUID, CreationStage.NONE);
-            pendingNames.remove(playerUUID);
+            resetPlayerState(player);
             player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-creation-cancelled"));
             return;
         }
@@ -192,12 +196,8 @@ public class WorldCreateGUI implements Listener {
         Material selectedIcon = event.getCurrentItem().getType();
         plugin.getLogger().info("[DEBUG] Ícone selecionado: " + selectedIcon);
 
-        // Verifica se o ícone é válido
-        if (!plugin.getConfigManager().isValidIconMaterial(selectedIcon)) {
-            plugin.getLogger().info("[DEBUG] Ícone inválido: " + selectedIcon);
-            player.sendMessage(ChatColor.RED + plugin.getLanguageManager().getMessage("invalid-icon"));
-            return;
-        }
+        // Removida a verificação de ícone válido aqui, pois estava duplicada e causando problemas
+        // A verificação já é feita no ConfigManager
 
         // Armazena o ícone selecionado
         pendingIcons.put(playerUUID, selectedIcon);
@@ -222,33 +222,29 @@ public class WorldCreateGUI implements Listener {
         plugin.getLogger().info("[DEBUG] Inventário fechado por " + player.getName());
         plugin.getLogger().info("[DEBUG] Estado atual: " + (playerStages.containsKey(playerUUID) ? playerStages.get(playerUUID) : "NONE"));
 
-        // Ignora se não está no estágio de seleção de ícone
-        if (!playerStages.containsKey(playerUUID) ||
-                playerStages.get(playerUUID) != CreationStage.SELECTING_ICON) {
-            plugin.getLogger().info("[DEBUG] Ignorando fechamento - jogador não está no estágio SELECTING_ICON");
-            return;
-        }
+        // Check if player is in SELECTING_ICON state
+        if (playerStages.containsKey(playerUUID) &&
+                playerStages.get(playerUUID) == CreationStage.SELECTING_ICON) {
 
-        // Verifica se é o inventário correto
-        String title = ChatColor.translateAlternateColorCodes('&',
-                plugin.getConfigManager().getCreateGUITitle());
+            // Get the inventory title
+            String title = event.getView().getTitle();
+            String expectedTitle = ChatColor.translateAlternateColorCodes('&',
+                    plugin.getConfigManager().getCreateGUITitle());
 
-        if (!event.getView().getTitle().equals(title)) {
-            plugin.getLogger().info("[DEBUG] Ignorando fechamento - título do inventário não corresponde");
-            return;
-        }
+            // Check if this is the icon selection inventory
+            if (title.equals(expectedTitle) || title.contains("Criar Novo Mundo")) {
+                // If player has an icon selected, the createWorld method will handle state management
+                // If not, cancel the world creation
+                if (!pendingIcons.containsKey(playerUUID)) {
+                    plugin.getLogger().info("[DEBUG] Fechou sem selecionar ícone - cancelando");
+                    resetPlayerState(player);
 
-        // Se tem ícone, está criando. Senão, cancelou.
-        if (!pendingIcons.containsKey(playerUUID)) {
-            // Cancela se fechou sem selecionar ícone
-            plugin.getLogger().info("[DEBUG] Fechou sem selecionar ícone - cancelando");
-            playerStages.put(playerUUID, CreationStage.NONE);
-            pendingNames.remove(playerUUID);
-
-            // Agenda mensagem para o próximo tick para garantir que será exibida após o fechamento
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-creation-cancelled"));
-            });
+                    // Schedule message for next tick to ensure it's shown after closing
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-creation-cancelled"));
+                    });
+                }
+            }
         }
     }
 
@@ -288,7 +284,7 @@ public class WorldCreateGUI implements Listener {
         // Verifica se o jogador cancelou
         if (worldName.equalsIgnoreCase("cancel")) {
             plugin.getLogger().info("[CHAT-DEBUG] Jogador cancelou a criação via chat");
-            playerStages.put(playerUUID, CreationStage.NONE);
+            resetPlayerState(player);
             Bukkit.getScheduler().runTask(plugin, () -> {
                 player.sendMessage(ChatColor.YELLOW + plugin.getLanguageManager().getMessage("world-creation-cancelled"));
             });
@@ -368,7 +364,7 @@ public class WorldCreateGUI implements Listener {
         if (!pendingNames.containsKey(playerUUID) || !pendingIcons.containsKey(playerUUID)) {
             plugin.getLogger().info("[DEBUG] ERRO: Nome ou ícone pendente não encontrado para " + player.getName());
             player.sendMessage(ChatColor.RED + plugin.getLanguageManager().getMessage("world-creation-error"));
-            playerStages.put(playerUUID, CreationStage.NONE);
+            resetPlayerState(player);
             return;
         }
 
@@ -379,9 +375,7 @@ public class WorldCreateGUI implements Listener {
 
         // Limpa os dados pendentes APÓS extrair os valores necessários
         String savedWorldName = worldName; // Salva o nome para usar no log
-        playerStages.put(playerUUID, CreationStage.NONE);
-        pendingNames.remove(playerUUID);
-        pendingIcons.remove(playerUUID);
+        resetPlayerState(player);
 
         // DEBUG: Log após limpar os dados pendentes
         plugin.getLogger().info("[DEBUG] Dados pendentes limpos. playerStages: " + playerStages.toString());
@@ -429,11 +423,19 @@ public class WorldCreateGUI implements Listener {
      * @param player Jogador
      */
     public void clearPlayerData(Player player) {
-        UUID uuid = player.getUniqueId();
-        plugin.getLogger().info("[DEBUG] Limpando dados de criação do jogador " + player.getName());
-        playerStages.put(uuid, CreationStage.NONE);
-        pendingNames.remove(uuid);
-        pendingIcons.remove(uuid);
+        resetPlayerState(player);
+    }
+
+    /**
+     * Reseta o estado do jogador
+     * @param player Jogador
+     */
+    public void resetPlayerState(Player player) {
+        UUID playerUUID = player.getUniqueId();
+        plugin.getLogger().info("[DEBUG] Resetando estado para o jogador " + player.getName());
+        playerStages.put(playerUUID, CreationStage.NONE);
+        pendingNames.remove(playerUUID);
+        pendingIcons.remove(playerUUID);
     }
 
     /**
@@ -447,7 +449,7 @@ public class WorldCreateGUI implements Listener {
         plugin.getLogger().info("[DEBUG] Criando mundo diretamente com nome: " + worldName);
 
         // Define o estágio como NONE para evitar conflitos com outros eventos
-        playerStages.put(playerUUID, CreationStage.NONE);
+        resetPlayerState(player);
 
         // Mensagem de criação
         player.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("creating-world")

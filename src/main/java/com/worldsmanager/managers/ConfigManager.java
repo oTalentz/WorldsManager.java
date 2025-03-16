@@ -194,23 +194,31 @@ public class ConfigManager {
 
     /**
      * Verifica se o item fornecido é um item válido para ícone
+     *
+     * @param material Material a ser verificado
+     * @return true se o material for válido para uso como ícone
      */
     public boolean isValidIconMaterial(Material material) {
-        if (material == null || !material.isItem()) {
+        if (material == null) {
             return false;
         }
 
+        // Get blacklist from config
         List<String> blacklist = config.getStringList("icons.blacklist");
         if (blacklist.contains(material.name())) {
             return false;
         }
 
+        // Get available icons list
         List<String> available = config.getStringList("icons.available");
-        if (!available.isEmpty()) {
-            return available.contains(material.name());
+
+        // If no specific list is provided, accept any valid material
+        if (available.isEmpty()) {
+            return true;
         }
 
-        return true;
+        // Check if the material is in the available list
+        return available.contains(material.name());
     }
 
     /**

@@ -9,15 +9,15 @@ database:
   host: glacier.lowping.host
   port: 3306
   name: s39_MinevoxelWorlds
-  user: u39_mcZQDt16cW
-  password: 7w@z^LNbhB=g^A6UaO0V!@RV
+  user: u39_UVeIyna5Ii
+  password: ^HBFP@EdP6JCFG^0PyzUoJa
   # Prefixo para tabelas
   table-prefix: wm_
   # Opções de conexão
   connection-pool:
     min-size: 5
     max-size: 10
-    timeout: 30000
+    timeout: 60000  # Aumentado para 60 segundos
     keep-alive: 300000
 
 # Configurações de mundos
@@ -115,6 +115,7 @@ icons:
     - GRASS_BLOCK
     - STONE
     - SAND
+    - END_STONE
     - DIRT
     - GOLD_BLOCK
     - DIAMOND_BLOCK
@@ -126,6 +127,12 @@ icons:
     - WATER_BUCKET
     - LAVA_BUCKET
     - SNOW_BLOCK
+    - JUNGLE_LOG
+    - NETHERRACK
+    - DRAGON_EGG
+    - BEACON
+    - COBWEB
+    - OAK_SAPLING
     - PUMPKIN
     - MELON
     - CACTUS
