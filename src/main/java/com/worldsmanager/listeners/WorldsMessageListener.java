@@ -12,7 +12,10 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import java.io.ByteArrayInputStream;
@@ -33,6 +36,9 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
 
     public WorldsMessageListener(WorldsManager plugin) {
         this.plugin = plugin;
+
+        // Registra como listener para eventos de jogador
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
     @Override
@@ -131,7 +137,6 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         try {
             worldPath = in.readUTF();
         } catch (EOFException e) {
-            // Versão antiga da mensagem, sem caminho personalizado
             plugin.getLogger().warning("Mensagem recebida sem informação de caminho personalizado");
         }
 
@@ -154,8 +159,15 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         File worldsBaseFolder = WorldCreationUtils.getWorldsBaseFolder();
         File playerDir = new File(worldsBaseFolder, worldPath);
         if (!playerDir.exists()) {
-            playerDir.mkdirs();
+            boolean success = playerDir.mkdirs();
+            if (success) {
+                plugin.getLogger().info("Diretório de jogador criado com sucesso: " + playerDir.getAbsolutePath());
+            } else {
+                plugin.getLogger().warning("Falha ao criar diretório de jogador: " + playerDir.getAbsolutePath());
+            }
         }
+
+        plugin.getLogger().info("Pasta do mundo: " + playerDir.getAbsolutePath());
 
         // Verifica se o mundo já existe
         if (Bukkit.getWorld(worldName) != null) {
@@ -428,5 +440,19 @@ public class WorldsMessageListener implements PluginMessageListener, Listener {
         }
 
         return settings;
+    }
+
+    /**
+     * Evento de entrada de jogador - processa teleportes pendentes
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        UUID playerUUID = player.getUniqueId();
+
+        // Verifica se há teleportes pendentes para este jogador
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            plugin.getWorldManager().checkPendingTeleports(player);
+        }, 20L); // 1 segundo de delay para garantir que o jogador está totalmente logado
     }
 }

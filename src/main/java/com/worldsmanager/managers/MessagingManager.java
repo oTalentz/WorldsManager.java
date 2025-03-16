@@ -29,6 +29,9 @@ public class MessagingManager {
     private final Map<UUID, Integer> teleportAttempts = new HashMap<>();
     private final int MAX_TELEPORT_ATTEMPTS = 3;
 
+    // Rastreamento de mundos pendentes para criação
+    private final Map<UUID, String> pendingWorldCreations = new HashMap<>();
+
     public MessagingManager(WorldsManager plugin) {
         this.plugin = plugin;
 
@@ -60,8 +63,8 @@ public class MessagingManager {
             }
 
             // Log para debug
-            plugin.getLogger().info("Preparando mensagem de criação de mundo: " + world.getWorldName());
-            plugin.getLogger().info("Servidor de destino: " + plugin.getConfigManager().getWorldsServerName());
+            plugin.getLogger().info("[MUNDO] Preparando mensagem de criação de mundo: " + world.getWorldName());
+            plugin.getLogger().info("[MUNDO] Servidor de destino: " + plugin.getConfigManager().getWorldsServerName());
 
             // Verificar se o canal está registrado
             if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
@@ -94,7 +97,8 @@ public class MessagingManager {
             msgout.writeUTF(world.getIcon().name());
 
             // Escrever o caminho personalizado do mundo
-            msgout.writeUTF(world.getWorldPath() != null ? world.getWorldPath() : "");
+            String worldPath = world.getWorldPath() != null ? world.getWorldPath() : "";
+            msgout.writeUTF(worldPath);
 
             // Escrever configurações do mundo
             WorldSettings settings = world.getSettings();
@@ -127,11 +131,27 @@ public class MessagingManager {
                 }
             }
 
+            // Adicionar ao mapa de mundos pendentes
+            pendingWorldCreations.put(requester.getUniqueId(), world.getWorldName());
+
+            // Armazenar também como teleporte pendente para quando o jogador mudar de servidor
+            plugin.getWorldManager().addPendingTeleport(requester.getUniqueId(), world.getWorldName());
+
             // Notificar o jogador
             requester.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("world-creation-requested"));
+            requester.sendMessage(ChatColor.YELLOW + "Preparando mundo... Por favor aguarde.");
 
-            plugin.getLogger().info("Mensagem de criação de mundo enviada para o servidor: " +
+            plugin.getLogger().info("[MUNDO] Mensagem de criação de mundo enviada para o servidor: " +
                     plugin.getConfigManager().getWorldsServerName());
+
+            // Agendar teleporte após um delay para permitir que o mundo seja criado primeiro
+            int teleportDelay = plugin.getConfigManager().getTeleportDelay();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (requester.isOnline() && pendingWorldCreations.containsKey(requester.getUniqueId())) {
+                    requester.sendMessage(ChatColor.GREEN + "Mundo pronto! Teleportando...");
+                    teleportPlayerToWorldsServer(requester);
+                }
+            }, teleportDelay); // Usar o delay configurado
 
             return true;
         } catch (IOException e) {
@@ -142,6 +162,32 @@ public class MessagingManager {
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Erro inesperado ao enviar mensagem de criação de mundo", e);
             requester.sendMessage(ChatColor.RED + "Erro inesperado: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Teleporta o jogador para o servidor de mundos
+     *
+     * @param player Jogador a ser teleportado
+     * @return true se o teleporte foi iniciado com sucesso
+     */
+    private boolean teleportPlayerToWorldsServer(Player player) {
+        try {
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(b);
+
+            out.writeUTF("Connect");
+            out.writeUTF(plugin.getConfigManager().getWorldsServerName());
+
+            player.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
+
+            plugin.getLogger().info("[MUNDO] Jogador " + player.getName() +
+                    " enviado para o servidor " + plugin.getConfigManager().getWorldsServerName());
+
+            return true;
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Erro ao teleportar jogador para servidor de mundos", e);
             return false;
         }
     }
@@ -160,7 +206,8 @@ public class MessagingManager {
                 return false;
             }
 
-            plugin.getLogger().info("Iniciando processo de teleporte para " + player.getName() + " para o mundo " + worldName);
+            plugin.getLogger().info("[MUNDO] Iniciando processo de teleporte para " + player.getName() +
+                    " para o mundo " + worldName);
 
             // Verificar se o canal está registrado
             if (!plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, BUNGEE_CHANNEL)) {
@@ -170,7 +217,8 @@ public class MessagingManager {
 
             // Adiciona o teleporte pendente ANTES do envio da mensagem
             plugin.getWorldManager().addPendingTeleport(player.getUniqueId(), worldName);
-            plugin.getLogger().info("Teleporte pendente adicionado para " + player.getName() + " ao mundo " + worldName);
+            plugin.getLogger().info("[MUNDO] Teleporte pendente adicionado para " +
+                    player.getName() + " ao mundo " + worldName);
 
             // Cria uma mensagem para alertar o servidor de destino sobre o teleporte pendente
             ByteArrayOutputStream alertBytes = new ByteArrayOutputStream();
@@ -191,7 +239,7 @@ public class MessagingManager {
             alertOut.write(alertMsgBytes.toByteArray());
 
             player.sendPluginMessage(plugin, BUNGEE_CHANNEL, alertBytes.toByteArray());
-            plugin.getLogger().info("Mensagem de preparação para teleporte enviada");
+            plugin.getLogger().info("[MUNDO] Mensagem de preparação para teleporte enviada");
 
             // Pequeno delay antes de conectar ao servidor para garantir que a mensagem de preparação chegue primeiro
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -205,7 +253,7 @@ public class MessagingManager {
 
                     if (player.isOnline()) {
                         player.sendPluginMessage(plugin, BUNGEE_CHANNEL, connectBytes.toByteArray());
-                        plugin.getLogger().info("Jogador " + player.getName() + " enviado para o servidor " +
+                        plugin.getLogger().info("[MUNDO] Jogador " + player.getName() + " enviado para o servidor " +
                                 plugin.getConfigManager().getWorldsServerName());
 
                         // Controle de tentativa de teleporte
@@ -280,7 +328,7 @@ public class MessagingManager {
                         // Envia a mensagem
                         anyPlayer.sendPluginMessage(plugin, BUNGEE_CHANNEL, b.toByteArray());
 
-                        plugin.getLogger().info("Enviada tentativa adicional de teleporte: " + (attempts + 1));
+                        plugin.getLogger().info("[MUNDO] Enviada tentativa adicional de teleporte: " + (attempts + 1));
 
                         // Agenda a próxima tentativa se necessário
                         scheduleFollowUpMessage(playerUUID, worldName);
@@ -297,7 +345,8 @@ public class MessagingManager {
                 // Tenta notificar o jogador se ele estiver online
                 Player player = Bukkit.getPlayer(playerUUID);
                 if (player != null && player.isOnline()) {
-                    player.sendMessage(ChatColor.RED + "Falha ao completar o teleporte após " + MAX_TELEPORT_ATTEMPTS + " tentativas.");
+                    player.sendMessage(ChatColor.RED + "Falha ao completar o teleporte após " +
+                            MAX_TELEPORT_ATTEMPTS + " tentativas.");
                     player.sendMessage(ChatColor.YELLOW + "Tente novamente ou contate um administrador.");
                 }
             }
@@ -508,5 +557,34 @@ public class MessagingManager {
             }
             return false;
         }
+    }
+
+    /**
+     * Remove um mundo dos mundos pendentes quando a criação for concluída
+     *
+     * @param playerUUID UUID do jogador
+     */
+    public void removePendingWorldCreation(UUID playerUUID) {
+        pendingWorldCreations.remove(playerUUID);
+    }
+
+    /**
+     * Verifica se existe uma criação de mundo pendente para o jogador
+     *
+     * @param playerUUID UUID do jogador
+     * @return true se existir uma criação pendente
+     */
+    public boolean hasPendingWorldCreation(UUID playerUUID) {
+        return pendingWorldCreations.containsKey(playerUUID);
+    }
+
+    /**
+     * Obtém o nome do mundo pendente para o jogador
+     *
+     * @param playerUUID UUID do jogador
+     * @return nome do mundo pendente ou null se não houver
+     */
+    public String getPendingWorldName(UUID playerUUID) {
+        return pendingWorldCreations.get(playerUUID);
     }
 }

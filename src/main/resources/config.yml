@@ -81,7 +81,7 @@ cross-server:
   # Ativar modo multi-servidor
   enabled: true
   # Nome do servidor onde os mundos serão criados fisicamente
-  worlds-server: "MineVoxel | Worlds"
+  worlds-server: "Worlds-1"
   # Teleportar automaticamente o jogador ao criar um mundo
   auto-teleport: true
   # Tempo de espera entre envio e teleporte (em ticks)

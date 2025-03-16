@@ -29,6 +29,7 @@ public class WorldManager implements Listener {
     private final DatabaseManager databaseManager;
     private final ConfigManager configManager;
     private final MessagingManager messagingManager;
+    private final TeleportManager teleportManager;
 
     // Sistema de teleportes pendentes
     private final Map<UUID, String> pendingTeleports = new HashMap<>();
@@ -39,6 +40,7 @@ public class WorldManager implements Listener {
         this.databaseManager = plugin.getDatabaseManager();
         this.configManager = plugin.getConfigManager();
         this.messagingManager = plugin.getMessagingManager();
+        this.teleportManager = new TeleportManager(plugin);
 
         // Inicializa o WorldCreationUtils
         WorldCreationUtils.init(plugin);
@@ -200,7 +202,7 @@ public class WorldManager implements Listener {
                 // Gera um nome de mundo único
                 String worldName = "wm_" + UUID.randomUUID().toString().substring(0, 8);
 
-                plugin.getLogger().info("Iniciando criação de mundo: " + worldName);
+                plugin.getLogger().info("[MUNDO] Iniciando criação de mundo: " + worldName);
 
                 // Cria objeto de mundo personalizado
                 CustomWorld customWorld = new CustomWorld(name, ownerUUID, worldName, icon);
@@ -215,13 +217,14 @@ public class WorldManager implements Listener {
                 if (offlinePlayer.getName() != null) {
                     playerName = offlinePlayer.getName().toLowerCase();
                 }
-                // Agora o caminho é relativo à pasta mundos-jogadores dentro do plugin
+
+                // Caminho relativo à pasta mundos-jogadores dentro do plugin
                 String worldPath = playerName;
                 customWorld.setWorldPath(worldPath);
 
                 // Salva no banco de dados PRIMEIRO para garantir que o mundo exista no banco
                 databaseManager.saveWorld(customWorld);
-                plugin.getLogger().info("Mundo salvo no banco de dados: " + worldName);
+                plugin.getLogger().info("[MUNDO] Mundo salvo no banco de dados: " + worldName);
 
                 // Adiciona aos mundos carregados
                 loadedWorlds.put(worldName, customWorld);
@@ -230,7 +233,7 @@ public class WorldManager implements Listener {
                 if (configManager.isCrossServerMode() && requester != null) {
                     // Verificação de null para evitar NullPointerException
                     if (messagingManager != null) {
-                        plugin.getLogger().info("Enviando mensagem cross-server para criar mundo: " + worldName);
+                        plugin.getLogger().info("[MUNDO] Enviando mensagem cross-server para criar mundo: " + worldName);
 
                         // Verifica se os canais estão registrados
                         if (!plugin.isReadyForCrossServer()) {
@@ -244,9 +247,10 @@ public class WorldManager implements Listener {
                         // Adiciona informação de teleporte pendente ANTES de enviar para o outro servidor
                         // Isso garante que o jogador será teleportado para o mundo após a mudança de servidor
                         addPendingTeleport(requester.getUniqueId(), worldName);
-                        plugin.getLogger().info("Adicionado teleporte pendente para " + requester.getName() +
+                        plugin.getLogger().info("[MUNDO] Adicionado teleporte pendente para " + requester.getName() +
                                 " ao mundo " + worldName);
 
+                        // Envia mensagem para criar o mundo no servidor de mundos
                         boolean messageSent = messagingManager.sendCreateWorldMessage(customWorld, requester);
 
                         if (!messageSent) {
@@ -256,28 +260,10 @@ public class WorldManager implements Listener {
                             }
                             // Não criar localmente em caso de falha - apenas notificar o erro
                             return null;
-                        } else {
-                            // Teleportar o jogador para o servidor correto
-                            plugin.getLogger().info("Teleportando jogador para o servidor de mundos: " +
-                                    configManager.getWorldsServerName());
-
-                            // Envia mensagem antes de teleportar
-                            requester.sendMessage(ChatColor.GREEN + plugin.getLanguageManager().getMessage("world-created-success"));
-                            requester.sendMessage(ChatColor.GREEN + "Você será teleportado para o seu mundo. Aguarde...");
-
-                            // Delay pequeno antes de teleportar (5 ticks = 0.25s)
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                boolean teleportSent = messagingManager.sendPlayerToServer(requester, configManager.getWorldsServerName());
-
-                                if (!teleportSent) {
-                                    plugin.getLogger().severe("Falha ao enviar jogador para o servidor de mundos!");
-                                    if (requester != null && requester.isOnline()) {
-                                        requester.sendMessage(ChatColor.RED + "Falha ao teleportar para o servidor de mundos. " +
-                                                "Tente teleportar manualmente usando /server " + configManager.getWorldsServerName());
-                                    }
-                                }
-                            }, 5L);
                         }
+
+                        // O MessagingManager agora lida com o teleporte após delay
+                        return customWorld;
                     } else {
                         plugin.getLogger().severe("MessagingManager não foi inicializado! Não é possível enviar mensagem cross-server");
                         if (requester != null) {
@@ -616,35 +602,12 @@ public class WorldManager implements Listener {
      */
     public boolean teleportPlayerToWorld(Player player, CustomWorld customWorld) {
         // Verifica se o modo cross-server está ativado
-        if (configManager.isCrossServerMode() && messagingManager != null) {
-            plugin.getLogger().info("Tentando teleportar jogador via cross-server: " + player.getName() +
-                    " para " + customWorld.getWorldName());
+        if (configManager.isCrossServerMode()) {
+            plugin.getLogger().info("Teleportando jogador via cross-server com verificação de servidor: " +
+                    player.getName() + " para " + customWorld.getWorldName());
 
-            // Verifica se os canais estão registrados
-            if (!plugin.isReadyForCrossServer()) {
-                plugin.getLogger().severe("Canais cross-server não estão corretamente registrados! Tentando registrar novamente...");
-
-                // Tenta registrar os canais novamente
-                plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, "BungeeCord");
-
-                if (plugin.getServer().getMessenger().isOutgoingChannelRegistered(plugin, "BungeeCord")) {
-                    plugin.getLogger().info("Canal BungeeCord registrado com sucesso após retry!");
-                } else {
-                    player.sendMessage(ChatColor.RED + "Erro: falha ao registrar canais de comunicação! Contate um administrador.");
-                    return false;
-                }
-            }
-
-            // Usar o método para enviar jogador para o mundo em outro servidor
-            boolean success = messagingManager.sendTeleportToWorldMessage(player, customWorld.getWorldName());
-
-            if (!success) {
-                player.sendMessage(ChatColor.RED + "Falha ao iniciar teleporte para o servidor de mundos. Tente novamente.");
-            } else {
-                player.sendMessage(ChatColor.YELLOW + "Teleportando para o servidor de mundos. Por favor, aguarde...");
-            }
-
-            return success;
+            // Usar o TeleportManager que verifica o servidor atual
+            return teleportManager.teleportToWorld(player, customWorld.getWorldName());
         } else {
             // Carrega o mundo se não estiver carregado
             World world = loadWorld(customWorld);
@@ -912,8 +875,6 @@ public class WorldManager implements Listener {
             return;
         }
 
-        plugin.getLogger().info("Excluindo pasta do mundo: " + folder.getAbsolutePath());
-
         File[] files = folder.listFiles();
         if (files != null) {
             for (File file : files) {
@@ -939,7 +900,7 @@ public class WorldManager implements Listener {
      */
     public void addPendingTeleport(UUID playerUUID, String worldName) {
         pendingTeleports.put(playerUUID, worldName);
-        plugin.getLogger().info("Teleporte pendente adicionado para " + playerUUID + " para o mundo " + worldName);
+        plugin.getLogger().info("[MUNDO] Teleporte pendente adicionado para " + playerUUID + " para o mundo " + worldName);
     }
 
     /**
@@ -950,7 +911,8 @@ public class WorldManager implements Listener {
 
         if (pendingTeleports.containsKey(playerUUID)) {
             String worldName = pendingTeleports.get(playerUUID);
-            plugin.getLogger().info("Processando teleporte pendente para " + player.getName() + " para o mundo " + worldName);
+            plugin.getLogger().info("[MUNDO] Processando teleporte pendente para " + player.getName() +
+                    " para o mundo " + worldName);
 
             // Remove do mapa de pendentes antes de teleportar
             pendingTeleports.remove(playerUUID);
@@ -962,20 +924,22 @@ public class WorldManager implements Listener {
                 if (world != null) {
                     // Primeiro tentamos carregar o mundo se ele não estiver carregado
                     if (!world.isLoaded()) {
-                        plugin.getLogger().info("Carregando mundo para teleporte pendente: " + worldName);
+                        plugin.getLogger().info("[MUNDO] Carregando mundo para teleporte pendente: " + worldName);
                         loadWorld(world);
                     }
 
                     if (world.isLoaded()) {
-                        teleportPlayerToWorld(player, world);
+                        world.teleportPlayer(player);
                         player.sendMessage(ChatColor.GREEN + "Você foi teleportado para o mundo: " + world.getName());
                     } else {
                         plugin.getLogger().warning("Mundo não pôde ser carregado: " + worldName);
-                        player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não pôde ser carregado.");
+                        player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. " +
+                                "Mundo não pôde ser carregado.");
                     }
                 } else {
                     plugin.getLogger().warning("Mundo para teleporte pendente não encontrado: " + worldName);
-                    player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. Mundo não encontrado.");
+                    player.sendMessage(ChatColor.RED + "Não foi possível teleportar você para o mundo. " +
+                            "Mundo não encontrado.");
                 }
             }, 40L); // 2 segundos de delay
         }
@@ -1032,34 +996,25 @@ public class WorldManager implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
 
+        // Informar o TeleportManager sobre a entrada do jogador
+        teleportManager.onPlayerJoin(player);
+
         // Verifica se há um teleporte pendente para este jogador
         UUID playerUUID = player.getUniqueId();
         if (pendingTeleports.containsKey(playerUUID)) {
             String worldName = pendingTeleports.get(playerUUID);
             plugin.getLogger().info("Teleporte pendente detectado para " + player.getName() + " ao mundo " + worldName);
 
-            // Remove da lista de pendentes
+            // Remove da lista de pendentes - o TeleportManager cuidará disso
             pendingTeleports.remove(playerUUID);
-
-            // Aguarda um pouco para garantir que o jogador terminou de entrar
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                // Busca o mundo pelo nome
-                CustomWorld world = getWorldByName(worldName);
-
-                if (world != null) {
-                    // Carrega o mundo se necessário
-                    loadWorld(world);
-
-                    // Teleporta o jogador
-                    if (world.teleportPlayer(player)) {
-                        player.sendMessage(ChatColor.GREEN + "Você foi teleportado para " + world.getName());
-                    } else {
-                        player.sendMessage(ChatColor.RED + "Falha ao teleportar para " + world.getName());
-                    }
-                } else {
-                    player.sendMessage(ChatColor.RED + "O mundo " + worldName + " não foi encontrado.");
-                }
-            }, 20L); // 1 segundo de delay
         }
+    }
+
+    /**
+     * Obtém o gerenciador de teleportes
+     * @return TeleportManager
+     */
+    public TeleportManager getTeleportManager() {
+        return teleportManager;
     }
 }

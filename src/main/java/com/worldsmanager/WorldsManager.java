@@ -53,9 +53,12 @@ public class WorldsManager extends JavaPlugin {
         instance = this;
 
         try {
+            getLogger().info("=== Inicializando WorldsManager ===");
+
             // Cria a pasta de configuração se não existir
             if (!getDataFolder().exists()) {
                 getDataFolder().mkdirs();
+                getLogger().info("Pasta de configuração criada: " + getDataFolder().getAbsolutePath());
             }
 
             // Cria a pasta para os mundos dos jogadores
@@ -63,25 +66,32 @@ public class WorldsManager extends JavaPlugin {
             if (!worldsFolder.exists()) {
                 worldsFolder.mkdirs();
                 getLogger().info("Pasta de mundos de jogadores criada: " + worldsFolder.getAbsolutePath());
+            } else {
+                getLogger().info("Usando pasta de mundos existente: " + worldsFolder.getAbsolutePath());
+
+                // Verificar conteúdo da pasta
+                File[] files = worldsFolder.listFiles();
+                if (files != null && files.length > 0) {
+                    getLogger().info("Conteúdo da pasta de mundos:");
+                    for (File file : files) {
+                        getLogger().info("- " + file.getName() + (file.isDirectory() ? " (pasta)" : " (arquivo)"));
+                    }
+                } else {
+                    getLogger().info("A pasta de mundos está vazia");
+                }
             }
 
             // Inicializa a classe WorldCreationUtils para usar a pasta do plugin
             WorldCreationUtils.init(this);
+            getLogger().info("WorldCreationUtils inicializado com pasta base: " +
+                    WorldCreationUtils.getWorldsBaseFolder().getAbsolutePath());
 
             // Inicializa gerenciadores
             initializeManagers();
 
             // VERIFICAÇÃO ADICIONAL para garantir que o canal BungeeCord está registrado
             if (configManager.isCrossServerMode()) {
-                if (!getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
-                    getLogger().info("Canal BungeeCord não registrado. Registrando novamente...");
-                    getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
-                }
-                if (!getServer().getMessenger().isIncomingChannelRegistered(this, "BungeeCord")) {
-                    getLogger().info("Canal BungeeCord de entrada não registrado. Registrando novamente...");
-                    getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", new WorldsMessageListener(this));
-                }
-                getLogger().info("Canais BungeeCord verificados com sucesso!");
+                setupCrossServerChannels();
             }
 
             // Conecta ao banco de dados
@@ -116,6 +126,26 @@ public class WorldsManager extends JavaPlugin {
             getLogger().severe("O plugin será desativado devido a erros na inicialização!");
             Bukkit.getPluginManager().disablePlugin(this);
         }
+    }
+
+    /**
+     * Configura os canais do BungeeCord para cross-server
+     */
+    private void setupCrossServerChannels() {
+        if (!getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+            getLogger().info("Registrando canal BungeeCord para saída...");
+            getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+        }
+
+        if (!getServer().getMessenger().isIncomingChannelRegistered(this, "BungeeCord")) {
+            getLogger().info("Registrando canal BungeeCord de entrada...");
+            if (worldsMessageListener == null) {
+                worldsMessageListener = new WorldsMessageListener(this);
+            }
+            getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", worldsMessageListener);
+        }
+
+        getLogger().info("Canais BungeeCord verificados com sucesso!");
     }
 
     private void setupMultiverseHook() {
@@ -190,7 +220,8 @@ public class WorldsManager extends JavaPlugin {
         if (configManager.isCrossServerMode()) {
             getLogger().info("Verificando registro de canais de mensagens para modo cross-server...");
             getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
-            getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", new WorldsMessageListener(this));
+            getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord",
+                    worldsMessageListener = new WorldsMessageListener(this));
             getLogger().info("Canais de mensagens registrados para modo cross-server");
         }
 
