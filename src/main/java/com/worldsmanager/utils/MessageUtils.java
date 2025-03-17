@@ -16,6 +16,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
 
 /**
  * Utilitários para envio de mensagens
@@ -37,21 +42,16 @@ public class MessageUtils {
         }
 
         // Processa cores hexadecimais (versões mais recentes do Spigot)
-        try {
-            Matcher matcher = HEX_PATTERN.matcher(text);
-            StringBuffer buffer = new StringBuffer();
+        Matcher matcher = HEX_PATTERN.matcher(text);
+        StringBuilder buffer = new StringBuilder();
 
-            while (matcher.find()) {
-                String group = matcher.group(1);
-                matcher.appendReplacement(buffer, net.md_5.bungee.api.ChatColor.of("#" + group).toString());
-            }
-
-            matcher.appendTail(buffer);
-            text = buffer.toString();
-        } catch (Exception e) {
-            // Ignora erros, pois pode ser uma versão antiga que não suporta cores hex
-            logger.fine("Erro ao processar cores hex: " + e.getMessage());
+        while (matcher.find()) {
+            String group = matcher.group(1);
+            matcher.appendReplacement(buffer, net.md_5.bungee.api.ChatColor.of("#" + group).toString());
         }
+
+        matcher.appendTail(buffer);
+        text = buffer.toString();
 
         // Processa cores antigas
         return ChatColor.translateAlternateColorCodes('&', text);
@@ -154,36 +154,18 @@ public class MessageUtils {
      * @param hoverText Texto ao passar o mouse
      * @return Componente de chat
      */
-    public static net.md_5.bungee.api.chat.TextComponent createClickableText(String text, String command, String hoverText) {
-        net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(colorize(text));
+    public static TextComponent createClickableText(String text, String command, String hoverText) {
+        TextComponent component = new TextComponent(colorize(text));
 
         // Define o comando a ser executado
-        component.setClickEvent(new net.md_5.bungee.api.chat.ClickEvent(
-                net.md_5.bungee.api.chat.ClickEvent.Action.RUN_COMMAND, command));
+        component.setClickEvent(new ClickEvent(
+                ClickEvent.Action.RUN_COMMAND, command));
 
         // Define o texto ao passar o mouse
         if (hoverText != null && !hoverText.isEmpty()) {
-            // Usar a API moderna
-            try {
-                // Tentar usar a API moderna primeiro
-                component.setHoverEvent(
-                        net.md_5.bungee.api.chat.HoverEvent.showText(
-                                net.md_5.bungee.api.chat.Component.text(colorize(hoverText))
-                        )
-                );
-            } catch (NoSuchMethodError e) {
-                // Fallback para API antiga se a nova não estiver disponível
-                try {
-                    component.setHoverEvent(new net.md_5.bungee.api.chat.HoverEvent(
-                            net.md_5.bungee.api.chat.HoverEvent.Action.SHOW_TEXT,
-                            new net.md_5.bungee.api.chat.BaseComponent[] {
-                                    new net.md_5.bungee.api.chat.TextComponent(colorize(hoverText))
-                            }
-                    ));
-                } catch (Exception ex) {
-                    logger.warning("Erro ao definir hover event: " + ex.getMessage());
-                }
-            }
+            BaseComponent[] hoverComponents = new ComponentBuilder(colorize(hoverText)).create();
+            component.setHoverEvent(new HoverEvent(
+                    HoverEvent.Action.SHOW_TEXT, hoverComponents));
         }
 
         return component;
