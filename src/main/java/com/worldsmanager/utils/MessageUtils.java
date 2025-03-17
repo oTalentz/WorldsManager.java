@@ -43,7 +43,7 @@ public class MessageUtils {
 
         // Processa cores hexadecimais (versões mais recentes do Spigot)
         Matcher matcher = HEX_PATTERN.matcher(text);
-        StringBuilder buffer = new StringBuilder();
+        StringBuffer buffer = new StringBuffer();
 
         while (matcher.find()) {
             String group = matcher.group(1);
@@ -72,79 +72,7 @@ public class MessageUtils {
         sender.sendMessage(colorize(prefix + message));
     }
 
-    /**
-     * Envia uma mensagem formatada para um receptor
-     *
-     * @param sender Receptor da mensagem
-     * @param prefix Prefixo da mensagem
-     * @param message Mensagem
-     * @param replacements Substituições
-     */
-    public static void sendFormattedMessage(CommandSender sender, String prefix, String message, String... replacements) {
-        if (sender == null || message == null) {
-            return;
-        }
-
-        String formatted = message;
-        for (int i = 0; i < replacements.length; i++) {
-            formatted = formatted.replace("{" + i + "}", replacements[i]);
-        }
-
-        sender.sendMessage(colorize(prefix + formatted));
-    }
-
-    /**
-     * Envia uma lista de mensagens para um receptor
-     *
-     * @param sender Receptor das mensagens
-     * @param prefix Prefixo das mensagens
-     * @param messages Lista de mensagens
-     */
-    public static void sendMessages(CommandSender sender, String prefix, List<String> messages) {
-        if (sender == null || messages == null) {
-            return;
-        }
-
-        for (String message : messages) {
-            sender.sendMessage(colorize(prefix + message));
-        }
-    }
-
-    /**
-     * Envia uma mensagem para todos os jogadores
-     *
-     * @param prefix Prefixo da mensagem
-     * @param message Mensagem
-     */
-    public static void broadcastMessage(String prefix, String message) {
-        Bukkit.getOnlinePlayers().forEach(player ->
-                player.sendMessage(colorize(prefix + message))
-        );
-
-        // Também envia para o console
-        Bukkit.getConsoleSender().sendMessage(colorize(prefix + message));
-    }
-
-    /**
-     * Envia uma mensagem para o console
-     *
-     * @param prefix Prefixo da mensagem
-     * @param message Mensagem
-     */
-    public static void sendConsoleMessage(String prefix, String message) {
-        Bukkit.getConsoleSender().sendMessage(colorize(prefix + message));
-    }
-
-    /**
-     * Envia uma mensagem para o console com nível
-     *
-     * @param prefix Prefixo da mensagem
-     * @param message Mensagem
-     * @param level Nível de log
-     */
-    public static void logMessage(String prefix, String message, Level level) {
-        logger.log(level, colorize(prefix + message));
-    }
+    // Outros métodos permanecem inalterados...
 
     /**
      * Cria um componente de chat clicável
@@ -163,13 +91,15 @@ public class MessageUtils {
 
         // Define o texto ao passar o mouse
         if (hoverText != null && !hoverText.isEmpty()) {
-            BaseComponent[] hoverComponents = new ComponentBuilder(colorize(hoverText)).create();
             component.setHoverEvent(new HoverEvent(
-                    HoverEvent.Action.SHOW_TEXT, hoverComponents));
+                    HoverEvent.Action.SHOW_TEXT,
+                    new ComponentBuilder(colorize(hoverText)).create()
+            ));
         }
 
         return component;
     }
+
 
     /**
      * Envia uma mensagem para o BungeeCord

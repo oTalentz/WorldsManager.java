@@ -141,6 +141,11 @@ public class ConfigManager implements ConfigService {
     }
 
     @Override
+    public boolean validateToken(String token) {
+        return token != null && token.equals(getSecurityToken());
+    }
+
+    @Override
     public void saveConfig() {
         try {
             config.save(configFile);
@@ -419,5 +424,10 @@ public class ConfigManager implements ConfigService {
     public void set(String path, Object value) {
         config.set(path, value);
         configCache.put(path, value);
+    }
+
+    @Override
+    public String getSecurityToken() {
+        return "";
     }
 }
