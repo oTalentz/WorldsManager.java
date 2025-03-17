@@ -239,13 +239,9 @@ public class ImprovedDatabaseManager implements DatabaseService {
             return;
         }
 
-        try {
-            if (!dataSource.isClosed()) {
-                dataSource.close();
-                logger.info("Conexão com o banco de dados fechada com sucesso");
-            }
-        } catch (SQLException e) {
-            logger.log(Level.SEVERE, "Falha ao desconectar do banco de dados", e);
+        if (!dataSource.isClosed()) {
+            dataSource.close();
+            logger.info("Conexão com o banco de dados fechada com sucesso");
         }
     }
 
